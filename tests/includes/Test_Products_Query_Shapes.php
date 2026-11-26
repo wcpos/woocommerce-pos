@@ -139,6 +139,43 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Slug paths WooCommerce still resolves hide a POS Only product too; the visible rows prove WooCommerce resolves the path.
+	 *
+	 * @dataProvider store_api_slug_path_variants
+	 *
+	 * @param string $format          The path format for the slug.
+	 * @param string $subject         The product fixture.
+	 * @param int    $expected_status The expected response status.
+	 */
+	public function test_store_api_slug_path_variant_hides_pos_only_product( string $format, string $subject, int $expected_status ): void {
+		$slug     = get_post_field( 'post_name', $this->ids[ $subject ] );
+		$response = rest_do_request( new WP_REST_Request( 'GET', sprintf( $format, $slug ) ) );
+
+		$this->assertSame( $expected_status, $response->get_status() );
+		if ( 404 === $expected_status ) {
+			$this->assertSame( 'woocommerce_rest_product_invalid_slug', $response->get_data()['code'] );
+		} else {
+			$this->assertSame( $this->ids[ $subject ], $response->get_data()['id'] );
+		}
+	}
+
+	/**
+	 * Store API slug paths, product fixtures and expected response statuses.
+	 *
+	 * @return array
+	 */
+	public function store_api_slug_path_variants(): array {
+		return array(
+			'trailing slash pos_only_product'             => array( '/wc/store/v1/products/%s/', 'pos_only_product', 404 ),
+			'trailing slash visible_product'              => array( '/wc/store/v1/products/%s/', 'visible_product', 200 ),
+			'doubled slash pos_only_product'              => array( '/wc/store/v1/products//%s', 'pos_only_product', 404 ),
+			'doubled slash visible_product'               => array( '/wc/store/v1/products//%s', 'visible_product', 200 ),
+			'unversioned trailing slash pos_only_product' => array( '/wc/store/products/%s/', 'pos_only_product', 404 ),
+			'unversioned trailing slash visible_product'  => array( '/wc/store/products/%s/', 'visible_product', 200 ),
+		);
+	}
+
+	/**
 	 * Collection visibility is still decided by the product query.
 	 */
 	public function test_store_api_collection_with_pos_only_on_is_untouched(): void {

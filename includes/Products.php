@@ -264,6 +264,8 @@ class Products {
 	 *
 	 * WooCommerce's single-product Store API routes check only is_publicly_viewable() and
 	 * never run a product query, so the catalogue's POS Only query filters never apply (#2653).
+	 * It matches WooCommerce's route handlers, not the path, because the by-slug route accepts
+	 * any non-space path and sanitises it, so a trailing or doubled slash still reaches the product.
 	 * Every guard leaves the response untouched when unsure. Use rest_request_after_callbacks
 	 * rather than rest_post_dispatch because rest_do_request() does not apply rest_post_dispatch.
 	 *
@@ -277,7 +279,8 @@ class Products {
 		if ( ! $response instanceof \WP_REST_Response || 200 !== $response->get_status() ) {
 			return $response;
 		}
-		if ( ! $request instanceof \WP_REST_Request || ! preg_match( '#^/wc/store(?:/v\d+)?/products/([^/]+)$#', strtolower( $request->get_route() ), $matches ) ) {
+		$route = \is_array( $handler ) && isset( $handler['callback'] ) && \is_array( $handler['callback'] ) ? ( $handler['callback'][0] ?? null ) : null;
+		if ( ! $route instanceof \Automattic\WooCommerce\StoreApi\Routes\V1\ProductsById && ! $route instanceof \Automattic\WooCommerce\StoreApi\Routes\V1\ProductsBySlug ) {
 			return $response;
 		}
 
@@ -286,7 +289,7 @@ class Products {
 			return $response;
 		}
 
-		if ( ctype_digit( $matches[1] ) ) {
+		if ( $route instanceof \Automattic\WooCommerce\StoreApi\Routes\V1\ProductsById ) {
 			return new \WP_Error(
 				'woocommerce_rest_product_invalid_id',
 				__( 'Invalid product ID.', 'woocommerce' ), // phpcs:ignore WordPress.WP.I18n.TextDomainMismatch -- WooCommerce's own string, so the 404 matches a missing product.
