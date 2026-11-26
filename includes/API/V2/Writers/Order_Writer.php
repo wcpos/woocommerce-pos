@@ -771,7 +771,8 @@ class Order_Writer extends Null_Writer {
 	 * while money is in motion (`wcpos_money_in_motion`, rule 3); captured, failed and voided
 	 * rows never block, and nothing is archived. A line change needs an editable order
 	 * (`reopen_required`, rule 4) unless the same push reopens it (D3: reopen and edit are one
-	 * write); `cancelled` never unlocks lines.
+	 * write); `cancelled` never unlocks lines. An order with a refund keeps its tax location
+	 * locked only when taxes are enabled (`wcpos_tax_location_locked`), because refunds keep their original rate ids.
 	 *
 	 * @param \WC_Order  $order         The order read under the order lock.
 	 * @param Sale_State $state         Its state, from the same read.
@@ -800,7 +801,46 @@ class Order_Writer extends Null_Writer {
 				)
 			);
 		}
+		if ( wc_tax_enabled() && array() !== $order->get_refunds() && $this->tax_location_moves( $order, $forward ) ) {
+			return new WP_Error( 'wcpos_tax_location_locked', 'The tax location cannot change once the order has a refund.', array( 'status' => 422 ) );
+		}
 		return null;
+	}
+
+	/**
+	 * Whether the forward would move the location WooCommerce taxes the order at.
+	 *
+	 * The forward's address fields and stamped basis are applied to an unsaved clone, and the
+	 * clone's taxable location (the `woocommerce_order_get_tax_location` filter included) is
+	 * compared with the order's.
+	 *
+	 * @param \WC_Order $order   The order read under the order lock.
+	 * @param array     $forward The forwarded update payload.
+	 */
+	private function tax_location_moves( \WC_Order $order, array $forward ): bool {
+		$basis = null;
+		foreach ( is_array( $forward['meta_data'] ?? null ) ? $forward['meta_data'] : array() as $entry ) {
+			if ( is_array( $entry ) && '_woocommerce_pos_tax_based_on' === ( $entry['key'] ?? '' ) && array_key_exists( 'value', $entry ) ) {
+				$basis = is_scalar( $entry['value'] ) ? (string) $entry['value'] : '';
+			}
+		}
+		if ( ! is_array( $forward['billing'] ?? null ) && ! is_array( $forward['shipping'] ?? null ) && null === $basis ) {
+			return false;
+		}
+		$probe = clone $order;
+		foreach ( array( 'billing', 'shipping' ) as $type ) {
+			if ( is_array( $forward[ $type ] ?? null ) ) {
+				$fields = array_filter( array_intersect_key( $forward[ $type ], array_flip( array( 'country', 'state', 'postcode', 'city' ) ) ), 'is_scalar' );
+				foreach ( $fields as $key => $value ) {
+					$probe->{"set_{$type}_{$key}"}( (string) $value );
+				}
+			}
+		}
+		if ( null !== $basis ) {
+			$probe->read_meta_data( true ); // The clone shares WC_Meta_Data objects with $order; re-read so the update touches only the probe.
+			$probe->update_meta_data( '_woocommerce_pos_tax_based_on', $basis );
+		}
+		return $order->get_taxable_location() !== $probe->get_taxable_location();
 	}
 
 	/**

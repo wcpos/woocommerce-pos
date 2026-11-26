@@ -2672,4 +2672,382 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( '1.00', $rows[0]['amount'] );
 		$this->assertSame( 'pos-partial', wc_get_order( $order_id )->get_status() );
 	}
+
+	/**
+	 * A POS order of one taxed line (10.00 at 10%) in the given status (`processing` is paid), with the
+	 * given stamped basis, a Beverly Hills billing address and, unless told not to, a refund of 5.00
+	 * of that line with its 0.50 tax.
+	 */
+	protected function refunded_taxed_pos_order( string $status = 'pos-open', string $basis = 'billing', bool $with_refund = true ): int {
+		update_option( 'woocommerce_calc_taxes', 'yes' );
+		$rate_id = \WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper::create_tax_rate(
+			array(
+				'country'  => '',
+				'rate'     => '10.000',
+				'name'     => 'Tax',
+				'priority' => 1,
+				'compound' => false,
+				'shipping' => true,
+			)
+		);
+		$order   = wc_create_order();
+		$item_id = $order->add_product( $this->product(), 1 );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->update_meta_data( '_woocommerce_pos_uuid', self::REC );
+		$order->update_meta_data( '_woocommerce_pos_tax_based_on', $basis );
+		$order->set_address(
+			array(
+				'first_name' => 'Ada',
+				'email'      => 'ada@example.com',
+				'address_1'  => '1 Rodeo Drive',
+				'country'    => 'US',
+				'state'      => 'CA',
+				'postcode'   => '90210',
+				'city'       => 'Beverly Hills',
+			),
+			'billing'
+		);
+		$order->calculate_totals();
+		$order->set_status( 'pending' );
+		$order->save();
+		$order_id = $order->get_id();
+		if ( 'processing' === $status ) {
+			wc_get_order( $order_id )->payment_complete();
+		}
+		$order = wc_get_order( $order_id );
+		$order->set_status( $status );
+		$order->save();
+		$this->assertSame( '1', wc_format_decimal( $this->first_item( $order_id )->get_total_tax( 'edit' ), 0 ) );
+		if ( $with_refund ) {
+			$refund = wc_create_refund(
+				array(
+					'order_id'       => $order_id,
+					'amount'         => '5.50',
+					'refund_payment' => false,
+					'line_items'     => array(
+						$item_id => array(
+							'qty'          => 0,
+							'refund_total' => '5.00',
+							'refund_tax'   => array( $rate_id => '0.50' ),
+						),
+					),
+				)
+			);
+			$this->assertInstanceOf( \WC_Order_Refund::class, $refund );
+		}
+
+		return $order_id;
+	}
+
+	/** The order's own document with its stamped tax basis meta entry set to the given basis. */
+	protected function document_with_basis( int $order_id, string $basis ): array {
+		$document = json_decode( (string) wp_json_encode( $this->order_document( $order_id ) ), true );
+		$meta     = array_values(
+			array_filter(
+				$document['meta_data'] ?? array(),
+				static fn( $entry ) => '_woocommerce_pos_tax_based_on' !== ( is_array( $entry ) ? ( $entry['key'] ?? '' ) : '' )
+			)
+		);
+		$meta[]   = array(
+			'key'   => '_woocommerce_pos_tax_based_on',
+			'value' => $basis,
+		);
+		$document['meta_data'] = $meta;
+
+		return $document;
+	}
+
+	/** The order's own document with a new billing first name, email and street: the taxed location stays. */
+	protected function document_with_same_tax_location( int $order_id ): array {
+		$document                          = $this->order_document( $order_id );
+		$document['billing']['first_name'] = 'Grace';
+		$document['billing']['email']      = 'grace@example.com';
+		$document['billing']['address_1']  = '9 Sunset Boulevard';
+
+		return $document;
+	}
+
+	/** Push a wc/v3 order update moving the billing country to GB, with or without the X-WCPOS header. */
+	protected function wc_v3_billing_move( int $order_id, bool $with_header ): \WP_REST_Response {
+		if ( ! $with_header ) {
+			unset( $_SERVER['HTTP_X_WCPOS'] );
+		}
+		$request = new WP_REST_Request( 'PUT', '/wc/v3/orders/' . $order_id );
+		$request->set_header( 'Content-Type', 'application/json' );
+		if ( $with_header ) {
+			$request->set_header( 'X-WCPOS', '1' );
+		}
+		$request->set_body( (string) wp_json_encode( array( 'billing' => array( 'country' => 'GB' ) ) ) );
+
+		return rest_get_server()->dispatch( $request );
+	}
+
+	protected function assert_tax_location_locked( \WP_REST_Response $response ): void {
+		$this->assertSame( 422, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'wcpos_tax_location_locked', $response->get_data()['code'] );
+		$this->assertSame( array( 'status' => 422 ), $response->get_data()['data'] );
+	}
+
+	public function test_billing_move_on_an_open_order_with_a_refund_is_refused_tax_location_locked(): void {
+		// Arrange.
+		$order_id = $this->refunded_taxed_pos_order();
+		$before   = $this->stored_totals( $order_id );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->document_with_new_billing( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assert_tax_location_locked( $response );
+		$this->assertSame( 'US', wc_get_order( $order_id )->get_billing_country() );
+		$this->assertSame( $before, $this->stored_totals( $order_id ) );
+	}
+
+	public function test_billing_move_with_taxes_disabled_on_an_order_with_a_refund_is_applied(): void {
+		// Arrange.
+		$order_id = $this->refunded_taxed_pos_order();
+		update_option( 'woocommerce_calc_taxes', 'no' );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->document_with_new_billing( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'GB', wc_get_order( $order_id )->get_billing_country() );
+	}
+
+	public function test_billing_change_that_keeps_the_tax_location_on_an_order_with_a_refund_is_applied(): void {
+		// Arrange.
+		$order_id = $this->refunded_taxed_pos_order();
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->document_with_same_tax_location( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( '9 Sunset Boulevard', wc_get_order( $order_id )->get_billing_address_1() );
+	}
+
+	public function test_push_without_addresses_or_basis_on_an_order_with_a_refund_is_applied(): void {
+		// Arrange.
+		$order_id = $this->refunded_taxed_pos_order();
+		$document = json_decode( (string) wp_json_encode( $this->order_document( $order_id ) ), true );
+		$document['meta_data'] = array_values(
+			array_filter(
+				$document['meta_data'] ?? array(),
+				static fn( $entry ) => '_woocommerce_pos_tax_based_on' !== ( is_array( $entry ) ? ( $entry['key'] ?? '' ) : '' )
+			)
+		);
+		unset( $document['billing'], $document['shipping'] );
+		$document['customer_note'] = 'Leave at the counter';
+
+		// Act.
+		$response = $this->push_envelope( 'update', $document, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$order = wc_get_order( $order_id );
+		$this->assertSame( 'Leave at the counter', $order->get_customer_note() );
+		$this->assertSame( 'US', $order->get_billing_country() );
+		$this->assertSame( 'billing', $order->get_meta( '_woocommerce_pos_tax_based_on' ) );
+	}
+
+	public function test_tax_location_check_with_a_refund_leaves_the_stored_basis_meta_rows_unchanged(): void {
+		// Arrange.
+		$order_id = $this->refunded_taxed_pos_order();
+		$keys     = array( '_woocommerce_pos_tax_based_on' );
+		$before   = $this->stored_meta_rows( $order_id, $keys );
+
+		// Act.
+		$refused       = $this->push_envelope( 'update', $this->document_with_new_billing( $order_id ), $this->order_revision( $order_id ) );
+		$after_refused = $this->stored_meta_rows( $order_id, $keys );
+		$basis_refused = $this->push_envelope( 'update', $this->document_with_basis( $order_id, 'base' ), $this->order_revision( $order_id ) );
+		$after_basis   = $this->stored_meta_rows( $order_id, $keys );
+		$basis_read    = wc_get_order( $order_id )->get_meta( '_woocommerce_pos_tax_based_on' );
+		$applied       = $this->push_envelope( 'update', $this->document_with_same_tax_location( $order_id ), $this->order_revision( $order_id ) );
+		$after_applied = $this->stored_meta_rows( $order_id, $keys );
+
+		// Assert.
+		$this->assert_tax_location_locked( $refused );
+		$this->assert_tax_location_locked( $basis_refused );
+		$this->assertSame( 'billing', $basis_read );
+		$this->assertSame( 200, $applied->get_status(), 'Response: ' . wp_json_encode( $applied->get_data() ) );
+		$this->assertCount( 1, $before );
+		$this->assertSame( $before, $after_refused );
+		$this->assertSame( $before, $after_basis );
+		$this->assertSame( $before, $after_applied );
+	}
+
+	public function test_billing_move_on_an_open_order_without_a_refund_is_applied(): void {
+		// Arrange.
+		$order_id = $this->refunded_taxed_pos_order( 'pos-open', 'billing', false );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->document_with_new_billing( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'GB', wc_get_order( $order_id )->get_billing_country() );
+	}
+
+	public function test_billing_move_under_a_base_basis_with_a_refund_is_applied(): void {
+		// Arrange.
+		$order_id = $this->refunded_taxed_pos_order( 'pos-open', 'base' );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->document_with_new_billing( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'GB', wc_get_order( $order_id )->get_billing_country() );
+	}
+
+	public function test_shipping_move_under_a_shipping_basis_with_a_refund_is_refused(): void {
+		// Arrange.
+		$order_id = $this->refunded_taxed_pos_order( 'pos-open', 'shipping' );
+		$order    = wc_get_order( $order_id );
+		$order->set_address(
+			array(
+				'country'  => 'US',
+				'state'    => 'NY',
+				'postcode' => '10001',
+				'city'     => 'New York',
+			),
+			'shipping'
+		);
+		$order->save();
+		$document                        = $this->order_document( $order_id );
+		$document['shipping']['country'] = 'GB';
+
+		// Act.
+		$response = $this->push_envelope( 'update', $document, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assert_tax_location_locked( $response );
+		$this->assertSame( 'US', wc_get_order( $order_id )->get_shipping_country() );
+	}
+
+	public function test_billing_move_on_a_locked_order_with_a_refund_is_refused(): void {
+		// Arrange.
+		$order_id = $this->refunded_taxed_pos_order( 'processing' );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->document_with_new_billing( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assert_tax_location_locked( $response );
+		$this->assertSame( 'US', wc_get_order( $order_id )->get_billing_country() );
+	}
+
+	public function test_reopen_with_a_billing_move_on_an_order_with_a_refund_is_refused(): void {
+		// Arrange.
+		$order_id           = $this->refunded_taxed_pos_order( 'processing' );
+		$document           = $this->document_with_new_billing( $order_id );
+		$document['status'] = 'pos-open';
+
+		// Act.
+		$response = $this->push_envelope( 'update', $document, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assert_tax_location_locked( $response );
+		$order = wc_get_order( $order_id );
+		$this->assertSame( 'processing', $order->get_status() );
+		$this->assertSame( 'US', $order->get_billing_country() );
+	}
+
+	public function test_basis_change_in_meta_on_an_order_with_a_refund_is_refused(): void {
+		// Arrange.
+		$order_id = $this->refunded_taxed_pos_order( 'pos-open', 'base' );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->document_with_basis( $order_id, 'billing' ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assert_tax_location_locked( $response );
+		$this->assertSame( 'base', wc_get_order( $order_id )->get_meta( '_woocommerce_pos_tax_based_on' ) );
+	}
+
+	public function test_basis_cleared_in_meta_on_an_order_with_a_refund_is_refused(): void {
+		// Arrange.
+		$order_id = $this->refunded_taxed_pos_order( 'processing' );
+		$document = $this->document_with_basis( $order_id, 'billing' );
+		$last     = array_key_last( $document['meta_data'] );
+		$document['meta_data'][ $last ]['value'] = null;
+
+		// Act.
+		$response = $this->push_envelope( 'update', $document, $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assert_tax_location_locked( $response );
+		$this->assertSame( 'billing', wc_get_order( $order_id )->get_meta( '_woocommerce_pos_tax_based_on' ) );
+	}
+
+	public function test_basis_change_in_meta_on_an_order_without_a_refund_is_applied(): void {
+		// Arrange.
+		$order_id = $this->refunded_taxed_pos_order( 'pos-open', 'base', false );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->document_with_basis( $order_id, 'billing' ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'billing', wc_get_order( $order_id )->get_meta( '_woocommerce_pos_tax_based_on' ) );
+	}
+
+	public function test_plain_wc_v3_update_moving_billing_on_an_order_with_a_refund_is_applied(): void {
+		// Arrange.
+		$order_id = $this->refunded_taxed_pos_order();
+
+		// Act.
+		$response = $this->wc_v3_billing_move( $order_id, false );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'GB', wc_get_order( $order_id )->get_billing_country() );
+	}
+
+	public function test_wc_v3_update_with_the_wcpos_header_moving_billing_on_an_order_with_a_refund_is_applied(): void {
+		// Arrange.
+		$order_id = $this->refunded_taxed_pos_order();
+
+		// Act.
+		$response = $this->wc_v3_billing_move( $order_id, true );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'GB', wc_get_order( $order_id )->get_billing_country() );
+	}
+
+	public function test_wp_admin_order_screen_save_moving_billing_on_an_order_with_a_refund_is_kept(): void {
+		// Arrange.
+		$order_id = $this->refunded_taxed_pos_order( 'processing' );
+		$order    = wc_get_order( $order_id );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		if ( ! class_exists( 'WC_Meta_Box_Order_Data' ) ) {
+			require_once WC_ABSPATH . 'includes/admin/meta-boxes/class-wc-meta-box-order-data.php';
+		}
+		$saved_post = $_POST; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- saving the test environment; restored below.
+		$_POST      = array(
+			'order_status'      => 'wc-' . $order->get_status(),
+			'_payment_method'   => $order->get_payment_method(),
+			'customer_user'     => (string) $order->get_customer_id(),
+			'_billing_country'  => 'GB',
+			'_billing_state'    => '',
+			'_billing_postcode' => 'SW1A 1AA',
+			'_billing_city'     => 'London',
+		);
+
+		// Act.
+		try {
+			\WC_Meta_Box_Order_Data::save( $order_id );
+		} finally {
+			$_POST = $saved_post;
+		}
+
+		// Assert.
+		$saved_order = wc_get_order( $order_id );
+		$this->assertSame( 'GB', $saved_order->get_billing_country() );
+		$this->assertSame( 'SW1A 1AA', $saved_order->get_billing_postcode() );
+		$this->assertSame( 'London', $saved_order->get_billing_city() );
+		$this->assertSame( 'billing', $saved_order->get_meta( '_woocommerce_pos_tax_based_on' ) );
+	}
 }
