@@ -45,6 +45,9 @@ final class Fiscal_Record_Writers {
 	 */
 	private const ATTEMPTED_AT = 'attempted_at';
 
+	/** A parked tender correction's key prefix in the same map (#2686); a completion id never holds a colon. */
+	private const CORRECTION_PARK_PREFIX = 'tender_correction:';
+
 	/** WP-Cron hook that retries a refund's late check after its register was held by a close. */
 	public const REFUND_RETRY_HOOK = 'wcpos_fiscal_refund_retry';
 
@@ -108,12 +111,17 @@ final class Fiscal_Record_Writers {
 	 *
 	 * @param WC_Order $order  Order the record describes.
 	 * @param array    $fields Record fields.
+	 * @param bool     $notify False from the sweep, which repeats: a failure is logged, with no note or action.
 	 */
-	private function write( WC_Order $order, array $fields ): bool {
+	private function write( WC_Order $order, array $fields, bool $notify = true ): bool {
 		if ( null !== $this->store->record( $fields ) ) {
 			return true;
 		}
 		$type = (string) ( $fields['type'] ?? '' );
+		if ( ! $notify ) {
+			Logger::log( sprintf( 'Fiscal %s record for order #%d (source %s) could not be written; the sweep retries.', $type, $order->get_id(), (string) ( $fields['source_id'] ?? '' ) ) );
+			return false;
+		}
 		if ( ! in_array( $type, array( 'reattribution', 'sale_day_correction' ), true ) ) {
 			/* translators: %s: fiscal record type (sale, refund, void, cancellation). */
 			$order->add_order_note( sprintf( __( 'POS fiscal %s record could not be written; it will need recovery.', 'woocommerce-pos' ), $type ) );
@@ -256,7 +264,7 @@ final class Fiscal_Record_Writers {
 	 * @param WC_Order $order Order; it serves only the pre-check and the id, the drain reads a fresh copy.
 	 */
 	public function recover( WC_Order $order ): void {
-		if ( ! self::parked( $order ) ) {
+		if ( ! self::parked_sales( $order ) ) {
 			return; // A stale "nothing parked" only defers recovery to the next writer.
 		}
 		$lock = Order_Lock::instance();
@@ -272,7 +280,7 @@ final class Fiscal_Record_Writers {
 			}
 			$fresh->read_meta_data( true );
 			$history = Completion_History::of( $fresh );
-			foreach ( self::parked( $fresh ) as $completion_id => $document ) {
+			foreach ( self::parked_sales( $fresh ) as $completion_id => $document ) {
 				$completion_id = (string) $completion_id;
 				$entry         = $history->by_id( $completion_id );
 				$session       = $this->sale_session( $fresh, $entry ?? array( 'session' => (string) ( $document['session_id'] ?? '' ) ) );
@@ -371,7 +379,7 @@ final class Fiscal_Record_Writers {
 
 	/**
 	 * The orders the payments sweep retries, at most $limit, the batch shared by two passes
-	 * (SWEEP_PARKED_SHARE_PERCENT): orders holding a parked sale document, never-tried first, then by
+	 * (SWEEP_PARKED_SHARE_PERCENT): orders holding a parked entry (a sale document or a tender correction), never-tried first, then by
 	 * their last attempt, skipping any tried within $grace; and orders whose standing completion has no
 	 * sale record and nothing parked. A parked document that keeps failing so moves to the back.
 	 *
@@ -414,12 +422,23 @@ final class Fiscal_Record_Writers {
 	 * build the standing completion's sale record when it never landed (the request died between the
 	 * entry's save and `wcpos_sale_completed`, or the build threw), as record_sale() would have then.
 	 * The store is read first and record() replays by the completion id, so one completion never gets
-	 * two records; a reopened or legacy completion is never built.
+	 * two records; a reopened or legacy completion is never built. It ends by writing the order's owed
+	 * tender-correction late_sale records (recover_corrections()).
 	 *
 	 * @param WC_Order $order Order.
 	 */
 	public function retry( WC_Order $order ): void {
 		$this->recover( $order );
+		$this->retry_standing( $order );
+		$this->recover_corrections( $order );
+	}
+
+	/**
+	 * Build the standing completion's missing sale record, as retry() describes.
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	private function retry_standing( WC_Order $order ): void {
 		Order_Meta_Store::forget_datastore_cache( $order->get_id() );
 		$fresh = wc_get_order( $order->get_id() );
 		if ( ! $fresh instanceof WC_Order ) {
@@ -914,6 +933,15 @@ final class Fiscal_Record_Writers {
 	}
 
 	/**
+	 * The order's parked sale documents, without its parked tender corrections.
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	private static function parked_sales( WC_Order $order ): array {
+		return array_filter( self::parked( $order ), static fn( $key ) => 0 !== strpos( (string) $key, self::CORRECTION_PARK_PREFIX ), ARRAY_FILTER_USE_KEY );
+	}
+
+	/**
 	 * Park a sale document whose insert failed.
 	 *
 	 * @param WC_Order $order         Order.
@@ -1133,21 +1161,34 @@ final class Fiscal_Record_Writers {
 			if ( ! Pos_Uuid::is_uuid( $session_id ) ) {
 				return;
 			}
-			$written = true;
-			$locked  = $this->under_close_locks(
-				$order->get_id(),
-				$session_id,
-				function () use ( $order, $minus, $plus, $session_id, &$written ): void {
-					$written = $this->record_correction( $order, $minus, $plus, $session_id );
-				}
-			);
-			if ( ! $locked ) {
+			// Null: the locks were held elsewhere. False: the insert was refused, and write() noted it.
+			$written = $this->correct_under_locks( $order, $minus, $plus, $session_id );
+			if ( null === $written ) {
 				Logger::log( sprintf( 'Fiscal late_sale for payment correction %s on order #%d could not take the order and register locks.', $plus['id'], $order->get_id() ) );
 			}
-			// Nothing else rebuilds a correction, so a refused insert (write() noted it) retries like a held lock.
-			if ( ! $locked || ! $written ) {
+			// A refused insert retries like a held lock; after the last attempt the parked entry is the sweep's.
+			if ( ! $written ) {
 				if ( $attempt >= self::LATE_RETRY_MAX_ATTEMPTS || true !== wp_schedule_single_event( time() + self::LATE_RETRY_DELAY_SECONDS, self::CORRECTION_RETRY_HOOK, array( $order->get_id(), (string) $plus['id'], $attempt + 1 ) ) ) {
 					Logger::log( sprintf( 'Fiscal late check for payment correction %s on order #%d not retried after attempt %d: its register stayed held, or the retry could not be scheduled.', $plus['id'], $order->get_id(), $attempt ) );
+					$context = array( 'source_id' => Fiscal_Record_Store::digest_source_id( 'tender_correction:' . $plus['id'] ) );
+					if ( $this->store->find_by_source( 'late_sale', $context['source_id'] ) ) {
+						Logger::log( sprintf( 'Fiscal late_sale for payment correction %s on order #%d was already written by the sweep.', $plus['id'], $order->get_id() ) );
+						return;
+					}
+					if ( null === $written ) {
+						// Only the sweep retries it now (the parked entry selects the order): tell a human once.
+						$order->add_order_note( __( 'POS fiscal tender correction record could not be written; it will need recovery.', 'woocommerce-pos' ) );
+						do_action( 'wcpos_fiscal_record_failed', 'late_sale', $order, $context );
+						do_action_deprecated( 'woocommerce_pos_fiscal_record_failed', array( 'late_sale', $order, $context ), '2.0.0', 'wcpos_fiscal_record_failed' );
+					}
+					Order_Meta_Store::forget_datastore_cache( $order->get_id() );
+					$fresh = wc_get_order( $order->get_id() );
+					if ( $fresh instanceof WC_Order ) {
+						$fresh->read_meta_data( true );
+					}
+					if ( ! $fresh instanceof WC_Order || ! isset( self::parked( $fresh )[ strtolower( self::CORRECTION_PARK_PREFIX . $plus['id'] ) ] ) ) {
+						Logger::log( sprintf( 'Fiscal late_sale for payment correction %s on order #%d could not be parked: the sweep will not find it.', $plus['id'], $order->get_id() ) );
+					}
 				}
 			}
 		} catch ( \Throwable $error ) {
@@ -1165,8 +1206,23 @@ final class Fiscal_Record_Writers {
 	 * @param int    $attempt  This attempt.
 	 */
 	public function retry_correction( int $order_id, string $plus_id, int $attempt ): void {
-		$order    = wc_get_order( $order_id );
-		$plus     = $order instanceof WC_Order ? Ledger::instance()->find( $order, $plus_id ) : null;
+		$order = wc_get_order( $order_id );
+		$rows  = $order instanceof WC_Order ? self::correction_rows( $order, $plus_id ) : null;
+		if ( ! $rows ) {
+			Logger::log( sprintf( 'Fiscal correction retry for payment %s on order #%d found no correction to record.', $plus_id, $order_id ) );
+			return;
+		}
+		$this->handle_correction( $order, $rows[0], $rows[1], $rows[2], $attempt );
+	}
+
+	/**
+	 * A correction as the ledger holds it now: the corrected row, R- and R+; null without R-.
+	 *
+	 * @param WC_Order $order   Order.
+	 * @param string   $plus_id R+'s id.
+	 */
+	private static function correction_rows( WC_Order $order, string $plus_id ): ?array {
+		$plus     = Ledger::instance()->find( $order, $plus_id );
 		$original = $plus ? Ledger::instance()->find( $order, (string) ( $plus['corrects'] ?? '' ) ) : null;
 		$minus    = null;
 		foreach ( $original ? Ledger::instance()->read( $order ) : array() as $row ) {
@@ -1174,11 +1230,103 @@ final class Fiscal_Record_Writers {
 				$minus = $row;
 			}
 		}
-		if ( ! $minus ) {
-			Logger::log( sprintf( 'Fiscal correction retry for payment %s on order #%d found no correction to record.', $plus_id, $order_id ) );
+		return $minus ? array( (array) $original, $minus, (array) $plus ) : null;
+	}
+
+	/**
+	 * Run record_correction() under the close's locks; park R+ for the sweep when it could not run, threw
+	 * or its write failed, unpark it once it ran: written, counted or carried already, or its session open.
+	 *
+	 * @param WC_Order $order      Order.
+	 * @param array    $minus      R-.
+	 * @param array    $plus       R+.
+	 * @param string   $session_id Lowercase session id.
+	 * @param bool     $notify     Whether a failed write notes the order; see write().
+	 * @return bool|null Null when the locks were held elsewhere; else record_correction()'s answer.
+	 */
+	private function correct_under_locks( WC_Order $order, array $minus, array $plus, string $session_id, bool $notify = true ): ?bool {
+		$done = false;
+		$work = function () use ( $order, $minus, $plus, $session_id, $notify, &$done ): void {
+			$done = $this->record_correction( $order, $minus, $plus, $session_id, $notify );
+		};
+		try {
+			$locked = $this->under_close_locks( $order->get_id(), $session_id, $work );
+		} finally {
+			$this->park_correction( $order->get_id(), (string) $plus['id'], $done ? null : $session_id );
+		}
+		return $locked ? $done : null;
+	}
+
+	/**
+	 * Park R+'s entry (stamp its attempt when parked), or unpark it for a null session, on a fresh read
+	 * under the order lock taken without waiting: while another request holds the order nothing is saved.
+	 *
+	 * @param int         $order_id   Order ID.
+	 * @param string      $plus_id    R+'s id.
+	 * @param string|null $session_id R+'s session; null once nothing is owed.
+	 */
+	private function park_correction( int $order_id, string $plus_id, ?string $session_id ): void {
+		if ( ! Order_Lock::instance()->acquire( $order_id, 0 ) ) {
 			return;
 		}
-		$this->handle_correction( $order, (array) $original, $minus, (array) $plus, $attempt );
+		try {
+			Order_Meta_Store::forget_datastore_cache( $order_id );
+			$fresh = wc_get_order( $order_id );
+			if ( ! $fresh instanceof WC_Order ) {
+				return; // The finally releases the lock.
+			}
+			$fresh->read_meta_data( true );
+			$key    = strtolower( self::CORRECTION_PARK_PREFIX . $plus_id );
+			$parked = isset( self::parked( $fresh )[ $key ] );
+			if ( null !== $session_id ) {
+				$document = array(
+					'kind'       => 'tender_correction',
+					'plus_id'    => $plus_id,
+					'session_id' => $session_id,
+				);
+				$parked ? self::attempted( $fresh, $key ) : self::park( $fresh, $key, $document );
+			} elseif ( $parked ) {
+				self::unpark( $fresh, $key );
+			}
+		} finally {
+			Order_Lock::instance()->release( $order_id );
+		}
+	}
+
+	/**
+	 * The sweep's tender corrections (#2686): each parked one and each captured R+ gets its late_sale when
+	 * owed and missing, by handle_correction()'s locked path and source id. No note: the sweep repeats.
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	private function recover_corrections( WC_Order $order ): void {
+		Order_Meta_Store::forget_datastore_cache( $order->get_id() );
+		$fresh = wc_get_order( $order->get_id() );
+		if ( ! $fresh instanceof WC_Order ) {
+			return;
+		}
+		$fresh->read_meta_data( true );
+		$ids = array_column( array_diff_key( self::parked( $fresh ), self::parked_sales( $fresh ) ), 'plus_id' );
+		foreach ( Ledger::instance()->read( $fresh ) as $row ) {
+			$ids[] = 'captured' === ( $row['status'] ?? null ) && ! empty( $row['corrects'] ) ? (string) $row['id'] : null;
+		}
+		foreach ( array_filter( array_unique( $ids ) ) as $plus_id ) {
+			try {
+				// False: recorded already. Null: R- is gone, and nothing is owed.
+				$rows = $this->store->find_by_source( 'late_sale', Fiscal_Record_Store::digest_source_id( 'tender_correction:' . $plus_id ) ) ? false : self::correction_rows( $fresh, $plus_id );
+				if ( null === $rows ) {
+					Logger::log( sprintf( 'Fiscal correction recovery for payment %s on order #%d found no correction to record.', $plus_id, $fresh->get_id() ) );
+				}
+				if ( is_array( $rows ) ) {
+					$this->correct_under_locks( $fresh, $rows[1], $rows[2], strtolower( (string) ( $rows[2]['session_id'] ?? '' ) ), false );
+				} else {
+					$this->park_correction( $fresh->get_id(), $plus_id, null );
+				}
+			} catch ( \Throwable $error ) {
+				// One failing correction must not starve the rest; correct_under_locks() kept it parked.
+				Logger::log( sprintf( 'Fiscal correction recovery for payment %s on order #%d failed: %s', $plus_id, $fresh->get_id(), $error->getMessage() ) );
+			}
+		}
 	}
 
 	/** The write behind handle_correction(), under the close's locks.
@@ -1187,9 +1335,10 @@ final class Fiscal_Record_Writers {
 	 * @param array    $minus      R-.
 	 * @param array    $plus       R+.
 	 * @param string   $session_id Lowercase session id.
+	 * @param bool     $notify     Whether a failed write notes the order; see write().
 	 * @return bool False only when the insert failed; true when written or when nothing is owed.
 	 */
-	private function record_correction( WC_Order $order, array $minus, array $plus, string $session_id ): bool {
+	private function record_correction( WC_Order $order, array $minus, array $plus, string $session_id, bool $notify = true ): bool {
 		$closure = ( new Closure_Store() )->for_session( $session_id );
 		if ( null === $closure ) {
 			return true; // The session is open: its close counts both legs as corrections.
@@ -1226,7 +1375,8 @@ final class Fiscal_Record_Writers {
 						'variance_delta' => ( new Closure_Store() )->variance( array_fill_keys( array_keys( $closure['counted'] ), '0' ), $delta ),
 					),
 				)
-			)
+			),
+			$notify
 		);
 	}
 

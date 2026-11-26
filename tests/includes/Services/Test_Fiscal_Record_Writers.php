@@ -2451,6 +2451,368 @@ class Test_Fiscal_Record_Writers extends WCPOS_REST_Unit_Test_Case {
 		wp_clear_scheduled_hook( 'wcpos_fiscal_correction_retry', $retry );
 	}
 
+	/**
+	 * Run $work while another connection holds the session's register; the writer's wait becomes none.
+	 *
+	 * @param array    $session Session row.
+	 * @param callable $work    Work.
+	 */
+	private function with_register_held( array $session, callable $work ): void {
+		$name      = 'wcpos_register_' . strtolower( $session['register_id'] );
+		$rewrite   = static fn( $sql ) => str_replace( "GET_LOCK( '" . $name . "', 10 )", "GET_LOCK( '" . $name . "', 0 )", $sql );
+		$contender = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		try {
+			$this->assertSame( '1', (string) $contender->get_var( $contender->prepare( 'SELECT GET_LOCK(%s, 0)', $name ) ) );
+			add_filter( 'query', $rewrite );
+			$work();
+		} finally {
+			remove_filter( 'query', $rewrite );
+			$contender->get_var( $contender->prepare( 'SELECT RELEASE_LOCK(%s)', $name ) );
+			$contender->close();
+		}
+	}
+
+	/**
+	 * A card sale in a closed session, corrected to cash while its register is held; its first cron retry cleared.
+	 *
+	 * @param bool $sale_insert_fails Whether the sale's own record insert fails too, so its document is parked.
+	 * @return array{0: \WC_Order, 1: array, 2: array} The order, R+ and the session.
+	 */
+	private function correction_turned_away( bool $sale_insert_fails = false ): array {
+		$session = $this->closure_session();
+		$order   = null;
+		$card    = null;
+		$sale    = function () use ( $session, &$order, &$card ): void {
+			list( $order, $card ) = $this->card_sale_in( $session );
+		};
+		$sale_insert_fails ? $this->with_sale_inserts_failing( $sale ) : $sale();
+		( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$plus = null;
+		$this->with_register_held(
+			$session,
+			function () use ( $order, $card, &$plus ): void {
+				list( , , $plus ) = $this->correct_to_cash( $order, $card['id'] );
+			}
+		);
+		wp_clear_scheduled_hook( 'wcpos_fiscal_correction_retry', array( $order->get_id(), $plus['id'], 2 ) );
+		return array( wc_get_order( $order->get_id() ), $plus, $session );
+	}
+
+	/**
+	 * The tender correction's parked entry on the order, or null.
+	 *
+	 * @param int   $order_id Order ID.
+	 * @param array $plus     R+.
+	 */
+	private function parked_correction( int $order_id, array $plus ): ?array {
+		return $this->parked( $order_id )[ 'tender_correction:' . strtolower( $plus['id'] ) ] ?? null;
+	}
+
+	/**
+	 * The order's late_sale records for one tender correction.
+	 *
+	 * @param int   $order_id Order ID.
+	 * @param array $plus     R+.
+	 */
+	private function correction_late_sales( int $order_id, array $plus ): array {
+		$source = Fiscal_Record_Store::digest_source_id( 'tender_correction:' . $plus['id'] );
+		return array_values( array_filter( $this->late_sales( $order_id ), static fn( $record ) => $source === $record['source_id'] ) );
+	}
+
+	/** A correction the register lock turns away parks its entry for the sweep (#2686 Q4). */
+	public function test_correction_turned_away_by_a_held_register_parks_its_entry(): void {
+		// Arrange and act: the correction lands while a close holds the register.
+		list( $order, $plus, $session ) = $this->correction_turned_away();
+
+		// Assert.
+		$expected = array(
+			'kind'       => 'tender_correction',
+			'plus_id'    => $plus['id'],
+			'session_id' => strtolower( $session['id'] ),
+		);
+		$this->assertSame( $expected, $this->parked_correction( $order->get_id(), $plus ) );
+		$this->assertSame( array(), $this->late_sales( $order->get_id() ) );
+	}
+
+	/** The last retry of a turned-away correction leaves a stamped entry, one note and one failure signal. */
+	public function test_correction_final_retry_with_the_register_held_leaves_a_findable_marker(): void {
+		// Arrange.
+		list( $order, $plus, $session ) = $this->correction_turned_away();
+		$max     = ( new \ReflectionClassConstant( Fiscal_Record_Writers::class, 'LATE_RETRY_MAX_ATTEMPTS' ) )->getValue();
+		$failed  = array();
+		$observe = static function ( $type, $failed_order, $context ) use ( &$failed ): void {
+			$failed[] = array( $type, $failed_order->get_id(), $context );
+		};
+		add_action( 'wcpos_fiscal_record_failed', $observe, 10, 3 );
+
+		// Act.
+		try {
+			$this->with_register_held(
+				$session,
+				static function () use ( $order, $plus, $max ): void {
+					Fiscal_Record_Writers::instance()->retry_correction( $order->get_id(), $plus['id'], $max );
+				}
+			);
+		} finally {
+			remove_action( 'wcpos_fiscal_record_failed', $observe, 10 );
+		}
+
+		// Assert.
+		$this->assertArrayHasKey( 'attempted_at', (array) $this->parked_correction( $order->get_id(), $plus ) );
+		$notes = wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' );
+		$this->assertCount( 1, array_filter( $notes, static fn( $note ) => false !== strpos( $note, 'tender correction record could not be written' ) ) );
+		$source = Fiscal_Record_Store::digest_source_id( 'tender_correction:' . $plus['id'] );
+		$this->assertSame( array( array( 'late_sale', $order->get_id(), array( 'source_id' => $source ) ) ), $failed );
+		$this->assertFalse( wp_next_scheduled( 'wcpos_fiscal_correction_retry', array( $order->get_id(), $plus['id'], $max + 1 ) ) );
+		$this->assertSame( array(), $this->late_sales( $order->get_id() ) );
+	}
+
+	/** The last retry's refused insert leaves a stamped entry and only write()'s own note and failure signal. */
+	public function test_correction_final_retry_with_the_insert_refused_notes_once_and_stays_parked(): void {
+		// Arrange.
+		list( $order, $plus ) = $this->correction_turned_away();
+		$max                  = ( new \ReflectionClassConstant( Fiscal_Record_Writers::class, 'LATE_RETRY_MAX_ATTEMPTS' ) )->getValue();
+		$stuck                = static fn( $value, $old ) => $old;
+		$failed               = array();
+		$observe              = static function ( $type, $failed_order, $fields ) use ( &$failed ): void {
+			$failed[] = array( $type, $failed_order->get_id(), $fields['source_id'] ?? null, $fields['payload']['kind'] ?? null );
+		};
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_late_sale', $stuck, 10, 2 );
+		add_action( 'wcpos_fiscal_record_failed', $observe, 10, 3 );
+
+		// Act.
+		try {
+			Fiscal_Record_Writers::instance()->retry_correction( $order->get_id(), $plus['id'], $max );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_late_sale', $stuck, 10 );
+			remove_action( 'wcpos_fiscal_record_failed', $observe, 10 );
+		}
+
+		// Assert.
+		$notes  = wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' );
+		$source = Fiscal_Record_Store::digest_source_id( 'tender_correction:' . $plus['id'] );
+		$this->assertCount( 1, array_filter( $notes, static fn( $note ) => false !== strpos( $note, 'could not be written' ) ) );
+		$this->assertSame( array( array( 'late_sale', $order->get_id(), $source, 'tender_correction' ) ), $failed );
+		$this->assertArrayHasKey( 'attempted_at', (array) $this->parked_correction( $order->get_id(), $plus ) );
+		$this->assertFalse( wp_next_scheduled( 'wcpos_fiscal_correction_retry', array( $order->get_id(), $plus['id'], $max + 1 ) ) );
+	}
+
+	/** A last retry after the sweep already wrote the correction's late_sale adds no note and signals no failure. */
+	public function test_correction_final_retry_after_the_sweep_wrote_it_adds_no_note_and_no_signal(): void {
+		// Arrange: the sweep writes the turned-away correction.
+		list( $order, $plus, $session ) = $this->correction_turned_away();
+		Fiscal_Record_Writers::instance()->retry( wc_get_order( $order->get_id() ) );
+		$this->assertCount( 1, $this->correction_late_sales( $order->get_id(), $plus ) );
+		$max     = ( new \ReflectionClassConstant( Fiscal_Record_Writers::class, 'LATE_RETRY_MAX_ATTEMPTS' ) )->getValue();
+		$signals = 0;
+		$observe = static function () use ( &$signals ): void {
+			++$signals;
+		};
+		add_action( 'wcpos_fiscal_record_failed', $observe );
+
+		// Act: the last cron retry runs while a close holds the register.
+		try {
+			$this->with_register_held(
+				$session,
+				static function () use ( $order, $plus, $max ): void {
+					Fiscal_Record_Writers::instance()->retry_correction( $order->get_id(), $plus['id'], $max );
+				}
+			);
+		} finally {
+			remove_action( 'wcpos_fiscal_record_failed', $observe );
+		}
+
+		// Assert.
+		$notes = wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' );
+		$this->assertSame( array(), array_values( array_filter( $notes, static fn( $note ) => false !== strpos( $note, 'could not be written' ) ) ) );
+		$this->assertSame( 0, $signals );
+		$this->assertCount( 1, $this->correction_late_sales( $order->get_id(), $plus ) );
+	}
+
+	/** The sweep writes a parked correction's late_sale once and drops the entry. */
+	public function test_correction_sweep_writes_a_parked_correction_once_and_unparks_it(): void {
+		// Arrange.
+		list( $order, $plus ) = $this->correction_turned_away();
+
+		// Act: the sweep's candidates, then its retry of the order.
+		$owed = Fiscal_Record_Writers::orders_owed_a_sale( 100, 0 );
+		Fiscal_Record_Writers::instance()->retry( wc_get_order( $order->get_id() ) );
+
+		// Assert.
+		$this->assertContains( $order->get_id(), $owed );
+		$this->assertCount( 1, $this->correction_late_sales( $order->get_id(), $plus ) );
+		$fresh = wc_get_order( $order->get_id() );
+		$this->assertNotContains( Fiscal_Record_Writers::PENDING_META_KEY, wp_list_pluck( $fresh->get_data_store()->read_meta( $fresh ), 'meta_key' ) );
+	}
+
+	/** A closed-session correction whose late_sale never ran, with nothing parked, is written once by the sweep. */
+	public function test_correction_sweep_without_a_park_writes_the_missing_late_sale_once(): void {
+		// Arrange: the writer is not listening. The sweep is called directly here; a correction that was never
+		// parked is reached only when the sweep visits the order for another reason.
+		$session              = $this->closure_session();
+		list( $order, $card ) = $this->card_sale_in( $session );
+		( new Closure_Store() )->create( $this->closure_fields( $session ) );
+		$writers = Fiscal_Record_Writers::instance();
+		remove_action( 'wcpos_payment_corrected', array( $writers, 'handle_correction' ), 10 );
+		try {
+			list( , , $plus ) = $this->correct_to_cash( $order, $card['id'] );
+		} finally {
+			add_action( 'wcpos_payment_corrected', array( $writers, 'handle_correction' ), 10, 4 );
+		}
+		$this->assertSame( array(), $this->late_sales( $order->get_id() ) );
+
+		// Act: two sweeps.
+		$writers->retry( wc_get_order( $order->get_id() ) );
+		$first = count( $this->correction_late_sales( $order->get_id(), $plus ) );
+		$writers->retry( wc_get_order( $order->get_id() ) );
+
+		// Assert.
+		$this->assertSame( 1, $first );
+		$this->assertCount( 1, $this->late_sales( $order->get_id() ) );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+	}
+
+	/** The sweep writes nothing for a correction in a session still open, and parks nothing. */
+	public function test_correction_sweep_in_an_open_session_writes_nothing_and_parks_nothing(): void {
+		// Arrange.
+		$session              = $this->closure_session( null, 'open' );
+		list( $order, $card ) = $this->card_sale_in( $session );
+		$this->correct_to_cash( $order, $card['id'] );
+
+		// Act.
+		Fiscal_Record_Writers::instance()->retry( wc_get_order( $order->get_id() ) );
+
+		// Assert.
+		$this->assertSame( array(), $this->late_sales( $order->get_id() ) );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+	}
+
+	/** A parked sale document beside a parked correction: the sweep inserts the sale, carries each leg once and empties the map. */
+	public function test_correction_sweep_beside_a_parked_sale_document_inserts_the_sale_carries_each_leg_once_and_empties_the_map(): void {
+		// Arrange.
+		list( $order, $plus ) = $this->correction_turned_away( true );
+		$this->assertCount( 2, $this->parked( $order->get_id() ) );
+		$this->assertSame( array(), $this->sales( $order->get_id() ) );
+		$minus = current( array_filter( Ledger::instance()->read( $order ), static fn( $row ) => $plus['corrects'] === ( $row['reverses'] ?? null ) ) );
+
+		// Act.
+		Fiscal_Record_Writers::instance()->retry( wc_get_order( $order->get_id() ) );
+
+		// Assert: across every late_sale on the order, R- and R+ are each carried exactly once.
+		$legs = array();
+		foreach ( $this->late_sales( $order->get_id() ) as $record ) {
+			$legs = array_merge( $legs, array_column( (array) ( $record['payload']['tender_rows'] ?? array() ), 'id' ) );
+		}
+		$carried = array_count_values( $legs );
+		$this->assertCount( 1, $this->sales( $order->get_id() ) );
+		$this->assertSame( 1, $carried[ $minus['id'] ] ?? 0 );
+		$this->assertSame( 1, $carried[ $plus['id'] ] ?? 0 );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+	}
+
+	/** A sweep whose late_sale insert fails keeps the correction parked, quietly; the next sweep writes it once. */
+	public function test_correction_sweep_when_the_late_sale_insert_fails_keeps_the_entry_parked(): void {
+		// Arrange.
+		list( $order, $plus ) = $this->correction_turned_away();
+		$writers              = Fiscal_Record_Writers::instance();
+		$stuck                = static fn( $value, $old ) => $old;
+		$failed_notes         = fn() => count( array_filter( wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ), static fn( $note ) => false !== strpos( $note, 'could not be written' ) ) );
+		$notes_before         = $failed_notes();
+		$signals              = 0;
+		$observe              = static function () use ( &$signals ): void {
+			++$signals;
+		};
+
+		// Act: two sweeps while the late_sale sequence cannot advance.
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_late_sale', $stuck, 10, 2 );
+		add_action( 'wcpos_fiscal_record_failed', $observe );
+		try {
+			$writers->retry( wc_get_order( $order->get_id() ) );
+			$writers->retry( wc_get_order( $order->get_id() ) );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_late_sale', $stuck, 10 );
+			remove_action( 'wcpos_fiscal_record_failed', $observe );
+		}
+		$notes_after = $failed_notes();
+		$parked = $this->parked_correction( $order->get_id(), $plus );
+		$failed = $this->late_sales( $order->get_id() );
+		$writers->retry( wc_get_order( $order->get_id() ) );
+
+		// Assert: the failing sweeps neither noted the order nor signalled a failure.
+		$this->assertSame( $notes_before, $notes_after );
+		$this->assertSame( 0, $signals );
+		$this->assertArrayHasKey( 'attempted_at', (array) $parked );
+		$this->assertSame( array(), $failed );
+		$this->assertCount( 1, $this->correction_late_sales( $order->get_id(), $plus ) );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+	}
+
+	/** A correction whose sweep write throws stays parked and does not starve the order's next correction. */
+	public function test_correction_sweep_when_one_correction_throws_still_writes_the_next(): void {
+		// Arrange: two corrections on one order, both turned away by a held register.
+		list( $order, $first, $session ) = $this->correction_turned_away();
+		$second                          = null;
+		$this->with_register_held(
+			$session,
+			function () use ( $order, $first, &$second ): void {
+				$second = Ledger::instance()->correct( wc_get_order( $order->get_id() ), $first['id'], 'pos_card' );
+			}
+		);
+		$this->assertIsArray( $second );
+		wp_clear_scheduled_hook( 'wcpos_fiscal_correction_retry', array( $order->get_id(), $second['id'], 2 ) );
+		$this->assertNotNull( $this->parked_correction( $order->get_id(), $second ) );
+		$writers = Fiscal_Record_Writers::instance();
+		$thrown  = false;
+		$once    = static function ( $value ) use ( &$thrown ) {
+			if ( ! $thrown ) {
+				$thrown = true;
+				throw new \LogicException( 'The first late_sale insert throws.' );
+			}
+			return $value;
+		};
+
+		// Act: one sweep whose first late_sale insert throws, then a clean one.
+		add_filter( 'pre_update_option_wcpos_fiscal_sequence_late_sale', $once );
+		try {
+			$writers->retry( wc_get_order( $order->get_id() ) );
+		} finally {
+			remove_filter( 'pre_update_option_wcpos_fiscal_sequence_late_sale', $once );
+		}
+		$written = array( count( $this->correction_late_sales( $order->get_id(), $first ) ), count( $this->correction_late_sales( $order->get_id(), $second ) ) );
+		$stamped = $this->parked_correction( $order->get_id(), $written[0] ? $second : $first );
+		$writers->retry( wc_get_order( $order->get_id() ) );
+
+		// Assert: the first sweep wrote one and kept the other parked; the second wrote the rest.
+		$this->assertTrue( $thrown );
+		$this->assertSame( 1, array_sum( $written ) );
+		$this->assertArrayHasKey( 'attempted_at', (array) $stamped );
+		$this->assertCount( 1, $this->correction_late_sales( $order->get_id(), $first ) );
+		$this->assertCount( 1, $this->correction_late_sales( $order->get_id(), $second ) );
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+	}
+
+	/** The sweep drops a parked entry whose correction is no longer in the ledger, and writes nothing. */
+	public function test_correction_sweep_unparks_an_entry_whose_correction_is_gone(): void {
+		// Arrange: an entry in park_correction()'s shape for an R+ the ledger never held.
+		$order   = $this->order();
+		$plus_id = wp_generate_uuid4();
+		$entry   = array(
+			'kind'       => 'tender_correction',
+			'plus_id'    => $plus_id,
+			'session_id' => strtolower( (string) $order->get_meta( '_wcpos_session', true ) ),
+		);
+		$order->update_meta_data( Fiscal_Record_Writers::PENDING_META_KEY, wp_json_encode( array( 'tender_correction:' . $plus_id => $entry ) ) );
+		$order->save();
+		$this->assertCount( 1, $this->parked( $order->get_id() ) );
+
+		// Act.
+		Fiscal_Record_Writers::instance()->retry( wc_get_order( $order->get_id() ) );
+
+		// Assert.
+		$this->assertSame( array(), $this->parked( $order->get_id() ) );
+		$this->assertSame( array(), $this->late_sales( $order->get_id() ) );
+	}
+
 	/** A deferred correction whose legs a later completion's late_sale carried writes nothing on its retry. */
 	public function test_correction_legs_carried_by_a_later_completion_late_sale_are_not_written_again(): void {
 		// Arrange: the correction's late check is deferred by a held register.
