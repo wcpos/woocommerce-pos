@@ -81,6 +81,42 @@ class Test_Withheld_Fields_Walk extends Sync_REST_Store_Test_Case {
 	protected function arrange_storage(): void {
 	}
 
+	/** The echo-time seam alone strips cost for a restricted user on a WCPOS route, and leaves other routes and permitted users alone. */
+	public function test_echo_filter_strips_cost_on_its_own(): void {
+		// Arrange.
+		$cashier = $this->restricted_cashier();
+		$data    = array(
+			'id'                 => 1,
+			'name'               => 'Item',
+			'cost_of_goods_sold' => array( 'total_value' => 7.5 ),
+			'meta_data'          => array(
+				array(
+					'id'    => 9,
+					'key'   => '_cogs_value',
+					'value' => '7.5',
+				),
+				array(
+					'id'    => 10,
+					'key'   => 'colour',
+					'value' => 'red',
+				),
+			),
+		);
+		$server  = rest_get_server();
+		$request = new WP_REST_Request( 'GET', '/wcpos/v2/products' );
+		// Act.
+		$this->sign_in_with_cookie( $cashier );
+		$result = Withheld_Fields::filter_response( $data, $server, $request );
+		$result = json_decode( (string) wp_json_encode( $result ), true );
+		// Assert.
+		$this->assert_no_cost( $result, 'cashier echo response' );
+		$this->assertSame( 'Item', $result['name'] );
+		$this->assertSame( array( 'colour' ), array_values( wp_list_pluck( $result['meta_data'], 'key' ) ) );
+		$this->assertSame( $data, Withheld_Fields::filter_response( $data, $server, new WP_REST_Request( 'GET', '/wc/v3/products' ) ) );
+		$this->sign_in_with_cookie( $this->user );
+		$this->assertSame( $data, Withheld_Fields::filter_response( $data, $server, $request ) );
+	}
+
 	/** The admin sees cost in the product, variation, order, order line and refund. */
 	public function test_admin_control_sees_cost_everywhere_it_is_stored(): void {
 		// Arrange.

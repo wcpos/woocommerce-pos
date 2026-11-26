@@ -77,6 +77,77 @@ class Test_Withheld_Cost_Revisions extends Sync_REST_Store_Test_Case {
 		return $this->pulled_record( $collection, $id )['_rxdb_revision'];
 	}
 
+	/**
+	 * Revision the hash feed serves to a token user for a product or variation.
+	 *
+	 * @param int $user_id User id.
+	 * @param int $id      Product or variation id.
+	 */
+	private function hashed_revision_as( int $user_id, int $id ): string {
+		$this->sign_in_with_token( $user_id );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/changes/revision-hash' );
+		$request->set_query_params(
+			array(
+				'collection' => 'products',
+				'limit'      => 200,
+			)
+		);
+		list( $status, $body ) = $this->serve( $request );
+		$this->assertSame( 200, $status, wp_json_encode( $body ) );
+		foreach ( $body['changes'] as $change ) {
+			if ( $id === $change['id'] ) {
+				return $change['revision'];
+			}
+		}
+		$this->fail( 'Revision hash feed did not include id ' . $id );
+	}
+
+	/** A cost-only change moves only the admin's revision in the hash feed. */
+	public function test_revision_hash_feed_moves_only_for_the_admin_on_a_cost_only_change(): void {
+		foreach ( array( 'simple', 'variation' ) as $fixture ) {
+			// Arrange.
+			$id             = $this->ids[ $fixture ];
+			$cashier_before = $this->hashed_revision_as( $this->cashier, $id );
+			$admin_before   = $this->hashed_revision_as( $this->user, $id );
+			// Act.
+			$this->change_cost_only( $id );
+			// Assert.
+			$this->assertSame( $cashier_before, $this->hashed_revision_as( $this->cashier, $id ), $fixture . ': cashier hash must not move on a cost-only change' );
+			$this->assertNotSame( $admin_before, $this->hashed_revision_as( $this->user, $id ), $fixture . ': admin hash must move' );
+		}
+	}
+
+	/**
+	 * Revision the given user pulls for a record under cookie authentication.
+	 *
+	 * @param int    $user_id    User id.
+	 * @param string $collection products|variations.
+	 * @param int    $id         Record id.
+	 */
+	private function cookie_revision_as( int $user_id, string $collection, int $id ): string {
+		$this->sign_in_with_cookie( $user_id );
+		return $this->pulled_record( $collection, $id )['_rxdb_revision'];
+	}
+
+	/** A cost-only change moves only the admin's cookie pull revision. */
+	public function test_cookie_pull_revision_ignores_a_cost_only_change(): void {
+		$collections = array(
+			'simple'    => 'products',
+			'variation' => 'variations',
+		);
+		foreach ( $collections as $fixture => $collection ) {
+			// Arrange.
+			$id             = $this->ids[ $fixture ];
+			$cashier_before = $this->cookie_revision_as( $this->cashier, $collection, $id );
+			$admin_before   = $this->cookie_revision_as( $this->user, $collection, $id );
+			// Act.
+			$this->change_cost_only( $id );
+			// Assert.
+			$this->assertSame( $cashier_before, $this->cookie_revision_as( $this->cashier, $collection, $id ), $fixture . ': cashier cookie revision must not move on a cost-only change' );
+			$this->assertNotSame( $admin_before, $this->cookie_revision_as( $this->user, $collection, $id ), $fixture . ': admin cookie revision must move' );
+		}
+	}
+
 	/** A cost-only product change leaves the cashier's revision alone and moves the admin's. */
 	public function test_product_cost_change_moves_only_the_admin_revision(): void {
 		// Arrange.
@@ -140,18 +211,20 @@ class Test_Withheld_Cost_Revisions extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * What the current user is served for a record, with and without the withheld-fields echo filter.
+	 * What the current user is served for a record, before and after removing both withheld-fields response filters.
 	 *
 	 * @param callable $read Reads the record as served.
-	 * @return array{0: array, 1: array} Served, and served without the filter.
+	 * @return array{0: array, 1: array} Served, and served without either filter.
 	 */
 	private function served_with_and_without_filter( callable $read ): array {
 		$served = $read();
 		remove_filter( 'rest_pre_echo_response', array( Withheld_Fields::class, 'filter_response' ), 999 );
+		remove_filter( 'rest_request_after_callbacks', array( Withheld_Fields::class, 'filter_callback_response' ), 999 );
 		try {
 			$unfiltered = $read();
 		} finally {
 			add_filter( 'rest_pre_echo_response', array( Withheld_Fields::class, 'filter_response' ), 999, 3 );
+			add_filter( 'rest_request_after_callbacks', array( Withheld_Fields::class, 'filter_callback_response' ), 999, 3 );
 		}
 		// WooCommerce shuffles related_ids on every read; it is outside every revision too.
 		unset( $served['related_ids'], $unfiltered['related_ids'] );

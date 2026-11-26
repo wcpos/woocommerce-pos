@@ -205,6 +205,93 @@ class Test_Withheld_Cost_Parity extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Read the stored total cost of an order.
+	 *
+	 * @param int $order_id Order id.
+	 */
+	private function order_total_cost( int $order_id ): float {
+		clean_post_cache( $order_id );
+		return (float) wc_get_order( $order_id )->get_cogs_total_value();
+	}
+
+	/** A refund posted by the cashier records the same line cost as the admin's, whatever line cost is posted. */
+	public function test_refund_records_the_same_line_cost_for_cashier_and_admin(): void {
+		// Arrange.
+		$order_id = $this->ids['order'];
+		$item_id  = 0;
+		foreach ( wc_get_order( $order_id )->get_items() as $item ) {
+			if ( $this->ids['simple'] === $item->get_product_id() ) {
+				$item_id = $item->get_id();
+				break;
+			}
+		}
+		$refund = function () use ( $order_id, $item_id ) {
+			$request = new WP_REST_Request( 'POST', '/wc/v3/orders/' . $order_id . '/refunds' );
+			$body    = array(
+				'amount'     => '1.00',
+				'api_refund' => false,
+				'line_items' => array(
+					array(
+						'id'                 => $item_id,
+						'quantity'           => 1,
+						'refund_total'       => 1,
+						'cost_of_goods_sold' => array( 'value' => 99 ),
+					),
+				),
+			);
+			$request->set_header( 'Content-Type', 'application/json' );
+			$request->set_body( (string) wp_json_encode( $body ) );
+			return $request;
+		};
+		// Act.
+		$this->sign_in_with_token( $this->cashier );
+		list( $cashier_status, $cashier_body ) = $this->serve( $refund() );
+		$this->sign_in_with_token( $this->user );
+		list( $admin_status, $admin_body ) = $this->serve( $refund() );
+		// Assert.
+		$this->assertSame( 201, $cashier_status, wp_json_encode( $cashier_body ) );
+		$this->assertSame( 201, $admin_status, wp_json_encode( $admin_body ) );
+		$this->assert_no_cost( $cashier_body, 'cashier refund response' );
+		$this->assertSame( -7.5, $this->line_cost( (int) $cashier_body['id'] ) );
+		$this->assertSame( -7.5, $this->line_cost( (int) $admin_body['id'] ) );
+	}
+
+	/** The order's total cost in meta_data from the cashier is ignored on wc/v3 with a token; the admin's is stored. */
+	public function test_restricted_order_total_cost_meta_is_ignored_on_wc_v3(): void {
+		// Arrange.
+		// The admin control writes an internal order meta key, which WooCommerce reports.
+		$this->setExpectedIncorrectUsage( 'is_internal_meta_key' );
+		$order_id = $this->ids['order'];
+		$update   = function ( float $value ) use ( $order_id ) {
+			$request = new WP_REST_Request( 'POST', '/wc/v3/orders/' . $order_id );
+			$body    = array(
+				'meta_data' => array(
+					array(
+						'key'   => '_cogs_total_value',
+						'value' => $value,
+					),
+				),
+			);
+			$request->set_header( 'Content-Type', 'application/json' );
+			$request->set_body( (string) wp_json_encode( $body ) );
+			return $request;
+		};
+		$before   = $this->order_total_cost( $order_id );
+		// Act.
+		$this->sign_in_with_token( $this->cashier );
+		list( $status, $body ) = $this->serve( $update( 999 ) );
+		// Assert.
+		$this->assertLessThan( 300, $status, wp_json_encode( $body ) );
+		$this->assertSame( $before, $this->order_total_cost( $order_id ), 'cashier total cost must be ignored' );
+		// Act.
+		$this->sign_in_with_token( $this->user );
+		list( $status, $body ) = $this->serve( $update( 777 ) );
+		// Assert.
+		$this->assertLessThan( 300, $status, wp_json_encode( $body ) );
+		$this->assertSame( 777.0, $this->order_total_cost( $order_id ), 'admin total cost must be stored' );
+	}
+
+	/**
 	 * Create an order on a lane and return its id.
 	 *
 	 * @param string $lane v1|v2.
