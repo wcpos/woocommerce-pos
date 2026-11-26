@@ -4,6 +4,9 @@ import classNames from 'classnames';
 
 import { Card, Chip, DropdownMenu, DropdownMenuItem, Tooltip } from '@wcpos/ui';
 
+import { CheckIcon } from './check-icon';
+import { ExtensionSetupFooter, SetupChip, showsPosSetup } from './extension-setup-footer';
+import { renderSlot } from './extension-slots';
 import { KebabMenuTrigger } from '../../components/kebab-menu-trigger';
 import { t } from '../../translations';
 
@@ -135,25 +138,7 @@ function StatusBadge({ status }: { status: Extension['status'] }) {
 	switch (status) {
 		case 'active':
 			return (
-				<Chip
-					variant="success"
-					icon={
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							viewBox="0 0 20 20"
-							fill="currentColor"
-							className="wcpos:h-3 wcpos:w-3"
-							aria-hidden="true"
-							focusable="false"
-						>
-							<path
-								fillRule="evenodd"
-								d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-								clipRule="evenodd"
-							/>
-						</svg>
-					}
-				>
+				<Chip variant="success" icon={<CheckIcon className="wcpos:h-3 wcpos:w-3" />}>
 					{t('extensions.active', 'Active')}
 				</Chip>
 			);
@@ -191,23 +176,19 @@ function FooterAction({ extension }: { extension: Extension }) {
 }
 
 /**
- * Returns a registered Pro action component, or null if Pro is not active.
- */
-function getActionSlot(): React.ComponentType<{ extension: Extension }> | null {
-	return (window as any).wcpos?.settings?.getComponent?.('extensions.action') ?? null;
-}
-
-/**
  * Builds the card footer contents. Returns null when no footer should be
  * shown (so the parent can skip rendering Card.Footer entirely and avoid an
  * empty gray bar).
  */
 function buildFooterContent(extension: Extension): React.ReactNode {
-	const ActionSlot = getActionSlot();
+	if (showsPosSetup(extension)) {
+		return <ExtensionSetupFooter extension={extension} />;
+	}
 
 	// Pro plugin provides the action controls.
-	if (ActionSlot) {
-		return <ActionSlot extension={extension} />;
+	const action = renderSlot('extensions.action', extension);
+	if (action) {
+		return action;
 	}
 
 	// Free plugin: only show footer for not-installed extensions.
@@ -228,7 +209,10 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 
 	const showSettingsItem = !!extension.settings_url && extension.status !== 'not_installed';
 	const showGitHubItem = !!extension.homepage && isGitHubUrl(extension.homepage);
-	const showKebab = showSettingsItem || showGitHubItem;
+	const menuItems = showsPosSetup(extension)
+		? renderSlot('extensions.menu_items', extension)
+		: null;
+	const showKebab = showSettingsItem || showGitHubItem || !!menuItems;
 
 	return (
 		<Card>
@@ -249,6 +233,7 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 								{t('extensions.view_on_github', 'View on GitHub')}
 							</DropdownMenuItem>
 						)}
+						{menuItems}
 					</DropdownMenu>
 				)}
 				{/* Icon */}
@@ -275,7 +260,11 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 						{extension.name}
 					</h3>
 					<div className="wcpos:flex wcpos:flex-wrap wcpos:items-center wcpos:gap-x-1.5 wcpos:gap-y-1 wcpos:mt-1">
-						<StatusBadge status={extension.status} />
+						{showsPosSetup(extension) && extension.status === 'active' ? (
+							<SetupChip extension={extension} />
+						) : (
+							<StatusBadge status={extension.status} />
+						)}
 						<VersionLine extension={extension} />
 						{displayCategory && (
 							<span className="wcpos:inline-flex wcpos:items-center wcpos:gap-1.5 wcpos:whitespace-nowrap">
