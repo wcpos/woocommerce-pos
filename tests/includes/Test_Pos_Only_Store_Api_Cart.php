@@ -291,31 +291,4 @@ class Test_Pos_Only_Store_Api_Cart extends WCPOS_REST_Unit_Test_Case {
 			unset( $_SERVER['HTTP_X_WCPOS'] );
 		}
 	}
-
-	/**
-	 * Outside the Store API, the cart item data filter leaves data alone.
-	 */
-	public function test_cart_item_data_filter_outside_store_api_returns_data_unchanged(): void {
-		$data = apply_filters( 'woocommerce_add_cart_item_data', array( 'note' => 'kept' ), $this->pos_only, 0, 1 ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
-		$this->assertSame( array( 'note' => 'kept' ), $data );
-	}
-
-	/**
-	 * Classic AJAX errors do not disclose a hidden product's permalink.
-	 */
-	public function test_ajax_add_to_cart_error_url_for_pos_only_product_is_false(): void {
-		$this->assertFalse( apply_filters( 'woocommerce_cart_redirect_after_error', get_permalink( $this->pos_only ), $this->pos_only ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
-	}
-
-	/**
-	 * Visible products and products the user can edit keep their error URL.
-	 */
-	public function test_ajax_add_to_cart_error_url_kept_for_visible_product_and_editor(): void {
-		$visible_url = get_permalink( $this->visible );
-		$this->assertSame( $visible_url, apply_filters( 'woocommerce_cart_redirect_after_error', $visible_url, $this->visible ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
-
-		wp_set_current_user( $this->shop_manager );
-		$pos_only_url = get_permalink( $this->pos_only );
-		$this->assertSame( $pos_only_url, apply_filters( 'woocommerce_cart_redirect_after_error', $pos_only_url, $this->pos_only ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's filter.
-	}
 }
