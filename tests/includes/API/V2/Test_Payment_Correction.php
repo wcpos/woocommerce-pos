@@ -1527,7 +1527,7 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 0, Adopt_Refund_Test_Gateway::$calls );
 	}
 
-	/** v1 does not sanitise the string 'false', so WooCommerce would call the gateway. */
+	/** WooCommerce's v1 route does not sanitise the string 'false', so WooCommerce would call the gateway. */
 	public function test_wc_v1_refund_with_api_refund_string_false_of_unverified_replacement_returns_409(): void {
 		// Arrange.
 		$this->online_gateway();
@@ -1563,7 +1563,12 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		return array( array( 'false' ), array( 0 ), array( '0' ) );
 	}
 
-	/** @dataProvider v3_manual_refund_values */
+	/**
+	 * WooCommerce's v3 route sanitises 'false', 0 and '0' to false, so no gateway call is made.
+	 *
+	 * @dataProvider v3_manual_refund_values
+	 * @param mixed $api_refund The api_refund value sent.
+	 */
 	public function test_wc_v3_refund_with_api_refund_string_false_or_zero_of_unverified_replacement_succeeds_without_gateway_call( $api_refund ): void {
 		// Arrange.
 		$this->online_gateway();
@@ -1589,7 +1594,6 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 	/** An explicit v4 provider refund of a hand-recorded replacement writes nothing. */
 	public function test_wc_v4_refund_with_api_refund_true_of_unverified_replacement_returns_409(): void {
 		// Arrange.
-		global $wp_rest_server;
 		$this->online_gateway();
 		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
 		$correction           = $this->correct( $order, $cash['id'], 'wcpos_adopt_refund_test' );
@@ -1602,9 +1606,9 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		};
 		add_filter( 'woocommerce_admin_features', $enable_v4 );
 		try {
-			$wp_rest_server = null;
-			$this->server   = rest_get_server();
-			$request        = new \WP_REST_Request( 'POST', '/wc/v4/refunds' );
+			$GLOBALS['wp_rest_server'] = null; // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Rebuilding core's REST server with the v4 routes enabled.
+			$this->server              = rest_get_server();
+			$request                   = new \WP_REST_Request( 'POST', '/wc/v4/refunds' );
 			$request->set_body_params(
 				array(
 					'order_id'   => $id,
@@ -1630,7 +1634,7 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 0, Adopt_Refund_Test_Gateway::$calls );
 	}
 
-	/** v4 sanitises these explicit values to false and defaults the omitted field to false. */
+	/** WooCommerce's v4 route sanitises these explicit values to false and defaults the omitted field to false. */
 	public static function v4_manual_refund_fields(): array {
 		return array(
 			'string false' => array( array( 'api_refund' => 'false' ) ),
@@ -1639,10 +1643,14 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
-	/** @dataProvider v4_manual_refund_fields */
+	/**
+	 * WooCommerce's v4 route records a manual refund for these values without a gateway call.
+	 *
+	 * @dataProvider v4_manual_refund_fields
+	 * @param array $fields Extra body fields for the request.
+	 */
 	public function test_wc_v4_refund_with_api_refund_string_false_or_zero_of_unverified_replacement_succeeds_without_gateway_call( array $fields ): void {
 		// Arrange.
-		global $wp_rest_server;
 		$this->online_gateway();
 		list( $order, $cash ) = $this->completed_sale( 'pos_cash', '10.00' );
 		$correction           = $this->correct( $order, $cash['id'], 'wcpos_adopt_refund_test' );
@@ -1653,11 +1661,11 @@ class Test_Payment_Correction extends WCPOS_REST_Unit_Test_Case {
 		};
 		add_filter( 'woocommerce_admin_features', $enable_v4 );
 		try {
-			$wp_rest_server = null;
-			$this->server   = rest_get_server();
-			$request        = new \WP_REST_Request( 'POST', '/wc/v4/refunds' );
-			$fields['order_id'] = $order->get_id();
-			$fields['total']    = '4.00';
+			$GLOBALS['wp_rest_server'] = null; // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Rebuilding core's REST server with the v4 routes enabled.
+			$this->server              = rest_get_server();
+			$request                   = new \WP_REST_Request( 'POST', '/wc/v4/refunds' );
+			$fields['order_id']        = $order->get_id();
+			$fields['total']           = '4.00';
 			$request->set_body_params( $fields );
 
 			// Act.
