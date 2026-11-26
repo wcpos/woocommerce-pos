@@ -64,6 +64,10 @@ class Products {
 			add_filter( 'rest_pre_dispatch', array( $this, 'record_rest_route' ), 10, 3 );
 			// First, so no other after-callbacks filter sees a POS Only product's body.
 			add_filter( 'rest_request_after_callbacks', array( $this, 'hide_pos_only_store_api_single' ), PHP_INT_MIN, 3 );
+			// Before permission checks and callbacks, so a hidden product is never loaded or prepared.
+			add_filter( 'rest_request_before_callbacks', array( $this, 'hide_pos_only_wp_rest_single' ), PHP_INT_MIN, 3 );
+			add_filter( 'oembed_response_data', array( $this, 'hide_pos_only_oembed' ), PHP_INT_MAX, 2 );
+			add_filter( 'redirect_canonical', array( $this, 'prevent_pos_only_canonical_redirect' ), PHP_INT_MAX );
 			// Last, so a later callback that sets suppress_filters or post__in, or edits
 			// the WHERE clause, has already run when the exclusion is decided.
 			add_action( 'pre_get_posts', array( $this, 'hide_pos_only_products' ), PHP_INT_MAX );
@@ -287,7 +291,7 @@ class Products {
 		}
 
 		$data = $response->get_data();
-		if ( ! \is_array( $data ) || ! isset( $data['id'] ) || ! is_numeric( $data['id'] ) || ! $this->is_hidden_on_storefront( (int) $data['id'] ) || current_user_can( 'edit_post', (int) $data['id'] ) ) {
+		if ( ! \is_array( $data ) || ! isset( $data['id'] ) || ! is_numeric( $data['id'] ) || ! $this->is_hidden_from_viewer( (int) $data['id'] ) ) {
 			return $response;
 		}
 
@@ -307,12 +311,95 @@ class Products {
 	}
 
 	/**
+	 * Hide a POS Only product or its comment with core's own missing-item errors from
+	 * WP_REST_Posts_Controller::get_post() and WP_REST_Comments_Controller::get_comment().
+	 * This runs before the permission callback so an anonymous context=edit request
+	 * gets the same 404 as a missing post.
+	 *
+	 * @param mixed            $response The response before the route callback.
+	 * @param array            $handler  The route handler.
+	 * @param \WP_REST_Request $request  The request being dispatched.
+	 *
+	 * @return mixed The original response or WordPress's missing-item error.
+	 */
+	public function hide_pos_only_wp_rest_single( $response, $handler, $request ) {
+		if ( is_wp_error( $response ) || ! \is_array( $handler ) || ! \is_array( $handler['callback'] ?? null ) || 'get_item' !== ( $handler['callback'][1] ?? null ) ) {
+			return $response;
+		}
+
+		$controller = $handler['callback'][0];
+		if ( $controller instanceof \WP_REST_Posts_Controller ) {
+			$id = (int) $request['id'];
+			if ( 'product' === get_post_type( $id ) && $this->is_hidden_from_viewer( $id ) ) {
+				return new \WP_Error(
+					'rest_post_invalid_id',
+					__( 'Invalid post ID.' ), // phpcs:ignore WordPress.WP.I18n.MissingArgDomain -- WordPress's own string, so the 404 matches a missing post.
+					array( 'status' => 404 )
+				);
+			}
+		}
+
+		if ( $controller instanceof \WP_REST_Comments_Controller ) {
+			$comment = get_comment( (int) $request['id'] );
+			if ( $comment instanceof \WP_Comment && $this->is_hidden_from_viewer( (int) $comment->comment_post_ID ) ) {
+				return new \WP_Error(
+					'rest_comment_invalid_id',
+					__( 'Invalid comment ID.' ), // phpcs:ignore WordPress.WP.I18n.MissingArgDomain -- WordPress's own string, so the 404 matches a missing comment.
+					array( 'status' => 404 )
+				);
+			}
+		}
+
+		return $response;
+	}
+
+	/**
+	 * Hide POS Only embed data so WordPress returns its own missing-URL error (oembed_invalid_url, 404).
+	 *
+	 * @param array|false $data The embed response data.
+	 * @param \WP_Post    $post The post being embedded.
+	 *
+	 * @return array|false The original data, or false for a hidden post.
+	 */
+	public function hide_pos_only_oembed( $data, $post ) {
+		return $post instanceof \WP_Post && $this->is_hidden_from_viewer( (int) $post->ID ) ? false : $data;
+	}
+
+	/**
+	 * A missing id gets no redirect, so /?p=<id> for a POS Only product must likewise
+	 * answer as a missing post does, without revealing the permalink's slug.
+	 *
+	 * @param string|false $redirect_url The proposed canonical URL.
+	 *
+	 * @return string|false The original redirect URL, or false to cancel it.
+	 */
+	public function prevent_pos_only_canonical_redirect( $redirect_url ) {
+		if ( is_404() ) {
+			$id = (int) max( get_query_var( 'p' ), get_query_var( 'page_id' ), get_query_var( 'attachment_id' ) );
+			if ( $id && $this->is_hidden_from_viewer( $id ) ) {
+				return false;
+			}
+		}
+
+		return $redirect_url;
+	}
+
+	/**
 	 * Whether a product or variation id is POS Only and the request is a storefront one.
 	 *
 	 * @param int $id The product or variation id.
 	 */
 	private function is_hidden_on_storefront( int $id ): bool {
 		return $this->is_storefront_request() && ( Settings::instance()->is_product_pos_only( $id ) || Settings::instance()->is_variation_pos_only( $id ) );
+	}
+
+	/**
+	 * Whether a product or variation is POS Only and the current viewer is a shopper who cannot edit it.
+	 *
+	 * @param int $id The product or variation id.
+	 */
+	private function is_hidden_from_viewer( int $id ): bool {
+		return $this->is_hidden_on_storefront( $id ) && ! current_user_can( 'edit_post', $id );
 	}
 
 	/**
@@ -358,7 +445,7 @@ class Products {
 		 * feeds and sitemaps) and false in wp-admin, WP-CLI, the WooCommerce admin
 		 * REST namespaces and the POS itself. Return false to let a context of
 		 * your own see POS Only products.
-		 * This filter governs product queries; single-item reads (is_visible and the Store API single-product routes) use the storefront check alone.
+		 * This filter governs product queries; single-item reads (is_visible, the Store API and wp/v2 single-item routes, oEmbed and the canonical redirect) do not apply it.
 		 *
 		 * @param bool      $hide  Whether to exclude POS Only products from this query.
 		 * @param \WP_Query $query The query being decided.
