@@ -114,6 +114,103 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A POS Only product is indistinguishable from a missing product by id.
+	 */
+	public function test_store_api_single_pos_only_product_returns_same_404_as_missing_product(): void {
+		$hidden  = rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/products/' . $this->ids['pos_only_product'] ) );
+		$missing = rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/products/' . PHP_INT_MAX ) );
+
+		$this->assertSame( 404, $hidden->get_status() );
+		$this->assertSame( 'woocommerce_rest_product_invalid_id', $hidden->get_data()['code'] );
+		$this->assertSame( $missing->get_status(), $hidden->get_status() );
+		$this->assertSame( $missing->get_data()['code'], $hidden->get_data()['code'] );
+		$this->assertSame( $missing->get_data()['message'], $hidden->get_data()['message'] );
+	}
+
+	/**
+	 * The slug route uses WooCommerce's invalid-slug error.
+	 */
+	public function test_store_api_slug_pos_only_product_returns_invalid_slug_404(): void {
+		$slug     = get_post_field( 'post_name', $this->ids['pos_only_product'] );
+		$response = rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/products/' . $slug ) );
+
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'woocommerce_rest_product_invalid_slug', $response->get_data()['code'] );
+	}
+
+	/**
+	 * Collection visibility is still decided by the product query.
+	 */
+	public function test_store_api_collection_with_pos_only_on_is_untouched(): void {
+		$request = new WP_REST_Request( 'GET', '/wc/store/v1/products' );
+		$request->set_query_params( array( 'per_page' => 100 ) );
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+		$this->assertSame( true, \in_array( $this->ids['visible_product'], $ids, true ) );
+		$this->assertSame( false, \in_array( $this->ids['pos_only_product'], $ids, true ) );
+	}
+
+	/**
+	 * The POS can still fetch its own product by id.
+	 */
+	public function test_store_api_single_pos_only_product_on_pos_request_returns_200(): void {
+		$id                      = $this->ids['pos_only_product'];
+		$previous                = $_SERVER['HTTP_X_WCPOS'] ?? null;
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+		try {
+			$response = rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/products/' . $id ) );
+		} finally {
+			if ( null === $previous ) {
+				unset( $_SERVER['HTTP_X_WCPOS'] );
+			} else {
+				$_SERVER['HTTP_X_WCPOS'] = $previous;
+			}
+		}
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $id, $response->get_data()['id'] );
+	}
+
+	/**
+	 * Batch.php:78 omits GET from the allowed sub-request methods by default.
+	 */
+	public function test_store_api_batch_get_of_pos_only_product_serves_no_product_body(): void {
+		$id      = $this->ids['pos_only_product'];
+		$request = new WP_REST_Request( 'POST', '/wc/store/v1/batch' );
+		$request->set_body_params(
+			array(
+				'requests' => array(
+					array(
+						'method' => 'GET',
+						'path'   => '/wc/store/v1/products/' . $id,
+					),
+				),
+			)
+		);
+		$response = rest_do_request( $request );
+		$body     = wp_json_encode( $response->get_data() );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+		$this->assertSame( 0, preg_match( '/"id":"?' . $id . '"?[,}]/', $body ) );
+		$this->assertSame( false, strpos( $body, $this->fixtures[ $id ]['title'] ) );
+	}
+
+	/**
+	 * Turning the setting off makes the marked product readable again.
+	 */
+	public function test_store_api_single_with_pos_only_setting_off_returns_200(): void {
+		$this->set_pos_only_flag_on_next_request( false );
+		$id       = $this->ids['pos_only_product'];
+		$response = rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/products/' . $id ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $id, $response->get_data()['id'] );
+	}
+
+	/**
 	 * Data provider: shape, subject, whether the shape returns the subject (null: whatever WordPress returns without WCPOS).
 	 *
 	 * @return array<string, array{string, string, bool|null}>
@@ -198,10 +295,18 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 			array( 'single_product_url', 'visible_product', true ),
 			array( 'feed', 'pos_only_product', false ),
 			array( 'feed', 'visible_product', true ),
-			array( 'store_api_single', 'pos_only_product', true ), // #2653: the by-id route loads the product directly, no listing query.
+			array( 'store_api_single', 'pos_only_product', false ), // #2653: hidden like a missing product.
 			array( 'store_api_single', 'visible_product', true ),
-			array( 'store_api_single', 'pos_only_variation', true ), // #2653: the by-id route loads the variation directly, no listing query.
+			array( 'store_api_single', 'pos_only_variation', false ), // #2653: hidden like a missing product.
 			array( 'store_api_single', 'visible_variation', true ),
+			array( 'store_api_slug', 'pos_only_product', false ),
+			array( 'store_api_slug', 'visible_product', true ),
+			array( 'store_api_slug', 'pos_only_variation', false ),
+			array( 'store_api_slug', 'visible_variation', true ),
+			array( 'store_api_single_unversioned', 'pos_only_product', false ),
+			array( 'store_api_single_unversioned', 'visible_product', true ),
+			array( 'store_api_single_unversioned', 'pos_only_variation', false ),
+			array( 'store_api_single_unversioned', 'visible_variation', true ),
 			array( 'wc_v3_single', 'pos_only_product', true ), // By design: wc/v3 is the operator's namespace.
 			array( 'wc_v3_single', 'visible_product', true ),
 			array( 'wc_v3_single', 'pos_only_variation', true ), // By design: wc/v3 is the operator's namespace.
@@ -598,6 +703,10 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 				return \in_array( $id, $this->post_ids( $GLOBALS['wp_query']->posts ), true );
 			case 'store_api_single':
 				return 200 === rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/products/' . $id ) )->get_status();
+			case 'store_api_slug':
+				return 200 === rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/products/' . get_post_field( 'post_name', $id ) ) )->get_status();
+			case 'store_api_single_unversioned':
+				return 200 === rest_do_request( new WP_REST_Request( 'GET', '/wc/store/products/' . $id ) )->get_status();
 			case 'wc_v3_single':
 				wp_set_current_user( $this->user );
 				$route = $is_product ? '/wc/v3/products/' . $id : '/wc/v3/products/' . $fixture['parent'] . '/variations/' . $id;
