@@ -772,7 +772,7 @@ class Order_Writer extends Null_Writer {
 	 * rows never block, and nothing is archived. A line change needs an editable order
 	 * (`reopen_required`, rule 4) unless the same push reopens it (D3: reopen and edit are one
 	 * write); `cancelled` never unlocks lines. An order with a refund keeps its tax location
-	 * (`wcpos_tax_location_locked`), because the refunds keep the rate ids they were taxed at.
+	 * locked only when taxes are enabled (`wcpos_tax_location_locked`), because refunds keep their original rate ids.
 	 *
 	 * @param \WC_Order  $order         The order read under the order lock.
 	 * @param Sale_State $state         Its state, from the same read.
@@ -801,7 +801,7 @@ class Order_Writer extends Null_Writer {
 				)
 			);
 		}
-		if ( array() !== $order->get_refunds() && $this->tax_location_moves( $order, $forward ) ) {
+		if ( wc_tax_enabled() && array() !== $order->get_refunds() && $this->tax_location_moves( $order, $forward ) ) {
 			return new WP_Error( 'wcpos_tax_location_locked', 'The tax location cannot change once the order has a refund.', array( 'status' => 422 ) );
 		}
 		return null;

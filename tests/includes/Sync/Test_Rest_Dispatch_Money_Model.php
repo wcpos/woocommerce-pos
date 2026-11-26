@@ -2802,6 +2802,19 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( $before, $this->stored_totals( $order_id ) );
 	}
 
+	public function test_billing_move_with_taxes_disabled_on_an_order_with_a_refund_is_applied(): void {
+		// Arrange.
+		$order_id = $this->refunded_taxed_pos_order();
+		update_option( 'woocommerce_calc_taxes', 'no' );
+
+		// Act.
+		$response = $this->push_envelope( 'update', $this->document_with_new_billing( $order_id ), $this->order_revision( $order_id ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status(), 'Response: ' . wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'GB', wc_get_order( $order_id )->get_billing_country() );
+	}
+
 	public function test_billing_change_that_keeps_the_tax_location_on_an_order_with_a_refund_is_applied(): void {
 		// Arrange.
 		$order_id = $this->refunded_taxed_pos_order();
@@ -3004,17 +3017,37 @@ class Test_Rest_Dispatch_Money_Model extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 'GB', wc_get_order( $order_id )->get_billing_country() );
 	}
 
-	public function test_admin_style_save_moving_billing_on_an_order_with_a_refund_is_kept(): void {
+	public function test_wp_admin_order_screen_save_moving_billing_on_an_order_with_a_refund_is_kept(): void {
 		// Arrange.
-		$order_id = $this->refunded_taxed_pos_order();
+		$order_id = $this->refunded_taxed_pos_order( 'processing' );
 		$order    = wc_get_order( $order_id );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		if ( ! class_exists( 'WC_Meta_Box_Order_Data' ) ) {
+			require_once WC_ABSPATH . 'includes/admin/meta-boxes/class-wc-meta-box-order-data.php';
+		}
+		$saved_post = $_POST; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- saving the test environment; restored below.
+		$_POST      = array(
+			'order_status'      => 'wc-' . $order->get_status(),
+			'_payment_method'   => $order->get_payment_method(),
+			'customer_user'     => (string) $order->get_customer_id(),
+			'_billing_country'  => 'GB',
+			'_billing_state'    => '',
+			'_billing_postcode' => 'SW1A 1AA',
+			'_billing_city'     => 'London',
+		);
 
 		// Act.
-		$order->set_billing_country( 'GB' );
-		$order->save();
-		$order->calculate_totals( true );
+		try {
+			\WC_Meta_Box_Order_Data::save( $order_id );
+		} finally {
+			$_POST = $saved_post;
+		}
 
 		// Assert.
-		$this->assertSame( 'GB', wc_get_order( $order_id )->get_billing_country() );
+		$saved_order = wc_get_order( $order_id );
+		$this->assertSame( 'GB', $saved_order->get_billing_country() );
+		$this->assertSame( 'SW1A 1AA', $saved_order->get_billing_postcode() );
+		$this->assertSame( 'London', $saved_order->get_billing_city() );
+		$this->assertSame( 'billing', $saved_order->get_meta( '_woocommerce_pos_tax_based_on' ) );
 	}
 }
