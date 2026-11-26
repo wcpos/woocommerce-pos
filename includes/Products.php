@@ -513,7 +513,7 @@ class Products {
 		 * feeds and sitemaps) and false in wp-admin, WP-CLI, the WooCommerce admin
 		 * REST namespaces and the POS itself. Return false to let a context of
 		 * your own see POS Only products.
-			 * This filter governs product queries; single-item reads (is_visible, the Store API and wp/v2 single-item routes, oEmbed and the canonical redirect) and comment queries do not apply it.
+		 * This filter governs product queries; single-item reads (is_visible, the Store API and wp/v2 single-item routes, oEmbed and the canonical redirect) and comment queries do not apply it.
 		 *
 		 * @param bool      $hide  Whether to exclude POS Only products from this query.
 		 * @param \WP_Query $query The query being decided.

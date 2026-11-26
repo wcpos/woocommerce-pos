@@ -151,6 +151,10 @@ class Test_Pos_Only_Public_Routes extends WCPOS_REST_Unit_Test_Case {
 		WC_Install::create_pages();
 		$this->go_to( wc_get_page_id( 'shop' ) );
 		wp_set_current_user( 0 );
+
+		// A REST request starts with no global post. The fixtures leave one set, and oEmbed
+		// falls back to it for a URL that resolves to no post.
+		$GLOBALS['post'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Reset test state to a fresh request.
 	}
 
 	/**
@@ -525,8 +529,10 @@ class Test_Pos_Only_Public_Routes extends WCPOS_REST_Unit_Test_Case {
 
 	/** Filtering reviews by a hidden product is indistinguishable from filtering by a missing one. */
 	public function test_store_api_reviews_product_id_of_pos_only_product_matches_missing_product(): void {
-		$hidden  = $this->get( '/wc/store/v1/products/reviews', array( 'product_id' => $this->pos_only ) );
-		$missing = $this->get( '/wc/store/v1/products/reviews', array( 'product_id' => 999999 ) );
+		$hidden  = $this->get( '/wc/store/v1/products/reviews', array( 'product_id' => (string) $this->pos_only ) );
+		$missing = $this->get( '/wc/store/v1/products/reviews', array( 'product_id' => '999999' ) );
+		$this->assertSame( 200, $hidden->get_status() );
+		$this->assertSame( 200, $missing->get_status() );
 		$this->assertSame( $missing->get_data(), $hidden->get_data() );
 		$this->assertSame( $missing->get_headers()['X-WP-Total'], $hidden->get_headers()['X-WP-Total'] );
 		$this->assertSame( $missing->get_headers()['X-WP-TotalPages'], $hidden->get_headers()['X-WP-TotalPages'] );
@@ -541,7 +547,8 @@ class Test_Pos_Only_Public_Routes extends WCPOS_REST_Unit_Test_Case {
 
 	/** The shared category returns only the visible product's review. */
 	public function test_store_api_reviews_category_id_omits_pos_only_product_review(): void {
-		$response = $this->get( '/wc/store/v1/products/reviews', array( 'category_id' => $this->term_id ) );
+		$response = $this->get( '/wc/store/v1/products/reviews', array( 'category_id' => (string) $this->term_id ) );
+		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( array( $this->reviews['visible'] ), $this->review_ids( $response ) );
 	}
 
@@ -568,7 +575,7 @@ class Test_Pos_Only_Public_Routes extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 2, (int) $response->get_headers()['X-WP-Total'] );
 	}
 
-	/** A shopper cannot reuse the cached list or count from a POS request. */
+	/** A shopper's review list after a POS request still omits the hidden review. */
 	public function test_store_api_reviews_after_pos_request_still_omit_pos_only_review(): void {
 		$get_reviews = function () {
 			return $this->get( '/wc/store/v1/products/reviews' );
@@ -582,6 +589,28 @@ class Test_Pos_Only_Public_Routes extends WCPOS_REST_Unit_Test_Case {
 		$shopper = $get_reviews();
 		$this->assertSame( array( $this->reviews['visible'] ), $this->review_ids( $shopper ) );
 		$this->assertSame( 1, (int) $shopper->get_headers()['X-WP-Total'] );
+	}
+
+	/** A shopper's comment query does not reuse the cached result of the same query made for the POS. */
+	public function test_comment_query_after_pos_query_does_not_reuse_pos_cache(): void {
+		$review_ids = function () {
+			$comments = get_comments(
+				array(
+					'post_type' => 'product',
+					'status'    => 'approve',
+				)
+			);
+			return array_map( 'intval', wp_list_pluck( $comments, 'comment_ID' ) );
+		};
+
+		$pos = $this->as_pos( $review_ids );
+		$this->assertContains( $this->reviews['pos_only'], $pos );
+		$this->assertContains( $this->reviews['visible'], $pos );
+
+		$shopper = $review_ids();
+		$this->assertNotContains( $this->reviews['pos_only'], $shopper );
+		$this->assertNotContains( $this->reviews['pos_only_comment'], $shopper );
+		$this->assertContains( $this->reviews['visible'], $shopper );
 	}
 
 	/** Disabling POS Only products restores both reviews to the shopper's list. */
@@ -704,8 +733,10 @@ class Test_Pos_Only_Public_Routes extends WCPOS_REST_Unit_Test_Case {
 	 * Dispatch one request with the POS header, then restore the caller's context.
 	 *
 	 * @param callable $fn The request to dispatch.
+	 *
+	 * @return mixed The callable's result.
 	 */
-	private function as_pos( callable $fn ): WP_REST_Response {
+	private function as_pos( callable $fn ) {
 		$previous                = $_SERVER['HTTP_X_WCPOS'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- Preserve the test global verbatim to restore it.
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 		try {
