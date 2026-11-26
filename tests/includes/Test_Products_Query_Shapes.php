@@ -157,7 +157,7 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_store_api_single_pos_only_product_on_pos_request_returns_200(): void {
 		$id                      = $this->ids['pos_only_product'];
-		$previous                = $_SERVER['HTTP_X_WCPOS'] ?? null;
+		$previous                = $_SERVER['HTTP_X_WCPOS'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- Preserve the test global verbatim to restore it.
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 		try {
 			$response = rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/products/' . $id ) );
