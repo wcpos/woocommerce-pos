@@ -35,10 +35,11 @@ final class Unverified_Refund_Guard {
 		}
 
 		$route = $request->get_route();
-		if ( ! preg_match( '#^/wc/v[23]/orders/\d+/refunds/?$#i', $route ) && ! preg_match( '#^/wc/v4/refunds/?$#i', $route ) ) {
+		if ( ! preg_match( '#^/wc/v[123]/orders/\d+/refunds/?$#i', $route ) && ! preg_match( '#^/wc/v4/refunds/?$#i', $route ) ) {
 			return $response;
 		}
 
+		// Mirror WooCommerce's is_bool() ? : true: v2, v3 and v4 sanitise api_refund to a bool first, but in v1 a non-bool reaches the gateway.
 		$api     = $request['api_refund'];
 		$reaches = is_bool( $api ) ? $api : true;
 		if ( ! $reaches || ! isset( $handler['permission_callback'] ) || true !== call_user_func( $handler['permission_callback'], $request ) ) {
