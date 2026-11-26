@@ -241,6 +241,55 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A user who can edit the product still reads it, as WooCommerce's editor blocks do.
+	 *
+	 * @dataProvider store_api_single_product_editor_cases
+	 *
+	 * @param string $role    The user's role.
+	 * @param string $subject The fixture to request.
+	 * @param string $by      The lookup field, id or slug.
+	 */
+	public function test_store_api_single_pos_only_item_for_product_editor_returns_200( string $role, string $subject, string $by ): void {
+		$user_id = self::factory()->user->create( array( 'role' => $role ) );
+		wp_set_current_user( $user_id );
+
+		$path     = '/wc/store/v1/products/' . ( 'id' === $by ? $this->ids[ $subject ] : get_post_field( 'post_name', $this->ids[ $subject ] ) );
+		$response = rest_do_request( new WP_REST_Request( 'GET', $path ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $this->ids[ $subject ], $response->get_data()['id'] );
+	}
+
+	/**
+	 * Data provider: editor role, POS Only fixture, and lookup field.
+	 *
+	 * @return array<string, array{0: string, 1: string, 2: string}>
+	 */
+	public function store_api_single_product_editor_cases(): array {
+		return array(
+			'administrator by id pos_only_product'    => array( 'administrator', 'pos_only_product', 'id' ),
+			'administrator by id pos_only_variation'  => array( 'administrator', 'pos_only_variation', 'id' ),
+			'administrator by slug pos_only_product'  => array( 'administrator', 'pos_only_product', 'slug' ),
+			'shop_manager by id pos_only_product'     => array( 'shop_manager', 'pos_only_product', 'id' ),
+			'shop_manager by id pos_only_variation'   => array( 'shop_manager', 'pos_only_variation', 'id' ),
+			'shop_manager by slug pos_only_product'   => array( 'shop_manager', 'pos_only_product', 'slug' ),
+		);
+	}
+
+	/**
+	 * A logged-in shopper still gets the missing-product 404.
+	 */
+	public function test_store_api_single_pos_only_product_for_logged_in_customer_returns_404(): void {
+		$user_id = self::factory()->user->create( array( 'role' => 'customer' ) );
+		wp_set_current_user( $user_id );
+
+		$response = rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/products/' . $this->ids['pos_only_product'] ) );
+
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'woocommerce_rest_product_invalid_id', $response->get_data()['code'] );
+	}
+
+	/**
 	 * Batch.php:78 omits GET from the allowed sub-request methods by default.
 	 */
 	public function test_store_api_batch_get_of_pos_only_product_serves_no_product_body(): void {

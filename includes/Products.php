@@ -265,6 +265,7 @@ class Products {
 	 *
 	 * WooCommerce's single-product Store API routes check only is_publicly_viewable() and
 	 * never run a product query, so the catalogue's POS Only query filters never apply (#2653).
+	 * A user who can edit the product (an administrator or shop manager, for example in a block editor preview) still reads it.
 	 * It matches WooCommerce's route handlers, not the path, because the by-slug route accepts
 	 * any non-space path and sanitises it, so a trailing or doubled slash still reaches the product.
 	 * Every guard leaves the response untouched when unsure. Use rest_request_after_callbacks
@@ -286,7 +287,7 @@ class Products {
 		}
 
 		$data = $response->get_data();
-		if ( ! \is_array( $data ) || ! isset( $data['id'] ) || ! is_numeric( $data['id'] ) || ! $this->is_hidden_on_storefront( (int) $data['id'] ) ) {
+		if ( ! \is_array( $data ) || ! isset( $data['id'] ) || ! is_numeric( $data['id'] ) || ! $this->is_hidden_on_storefront( (int) $data['id'] ) || current_user_can( 'edit_post', (int) $data['id'] ) ) {
 			return $response;
 		}
 
