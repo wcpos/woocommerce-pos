@@ -62,7 +62,8 @@ class Products {
 
 		if ( $pos_only_products ) {
 			add_filter( 'rest_pre_dispatch', array( $this, 'record_rest_route' ), 10, 3 );
-			add_filter( 'rest_request_after_callbacks', array( $this, 'hide_pos_only_store_api_single' ), 10, 3 );
+			// First, so no other after-callbacks filter sees a POS Only product's body.
+			add_filter( 'rest_request_after_callbacks', array( $this, 'hide_pos_only_store_api_single' ), PHP_INT_MIN, 3 );
 			// Last, so a later callback that sets suppress_filters or post__in, or edits
 			// the WHERE clause, has already run when the exclusion is decided.
 			add_action( 'pre_get_posts', array( $this, 'hide_pos_only_products' ), PHP_INT_MAX );

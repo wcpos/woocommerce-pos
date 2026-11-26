@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\Products;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WP_Error;
 use WP_Query;
 use WP_REST_Request;
 
@@ -128,18 +129,42 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * The slug route uses WooCommerce's invalid-slug error.
+	 * The slug route uses WooCommerce's invalid-slug error, the same as a missing slug.
 	 */
 	public function test_store_api_slug_pos_only_product_returns_invalid_slug_404(): void {
 		$slug     = get_post_field( 'post_name', $this->ids['pos_only_product'] );
 		$response = rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/products/' . $slug ) );
+		$missing  = rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/products/no-such-product-2653' ) );
 
 		$this->assertSame( 404, $response->get_status() );
 		$this->assertSame( 'woocommerce_rest_product_invalid_slug', $response->get_data()['code'] );
+		$this->assertSame( $missing->get_status(), $response->get_status() );
+		$this->assertSame( $missing->get_data()['code'], $response->get_data()['code'] );
+		$this->assertSame( $missing->get_data()['message'], $response->get_data()['message'] );
+	}
+
+	/**
+	 * Another after-callbacks filter at priority 0 already sees the 404, not the product body.
+	 */
+	public function test_store_api_single_pos_only_product_hidden_from_other_after_callbacks_filters(): void {
+		$seen   = null;
+		$record = function ( $response ) use ( &$seen ) {
+			$seen = $response;
+
+			return $response;
+		};
+		add_filter( 'rest_request_after_callbacks', $record, 0 );
+
+		rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/products/' . $this->ids['pos_only_product'] ) );
+		remove_filter( 'rest_request_after_callbacks', $record, 0 );
+
+		$this->assertInstanceOf( WP_Error::class, $seen );
+		$this->assertSame( 'woocommerce_rest_product_invalid_id', $seen->get_error_code() );
 	}
 
 	/**
 	 * Slug paths WooCommerce still resolves hide a POS Only product too; the visible rows prove WooCommerce resolves the path.
+	 * The format's %1$s is the slug, and %2$s is the slug with its first dash turned into a slash.
 	 *
 	 * @dataProvider store_api_slug_path_variants
 	 *
@@ -149,7 +174,8 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_store_api_slug_path_variant_hides_pos_only_product( string $format, string $subject, int $expected_status ): void {
 		$slug     = get_post_field( 'post_name', $this->ids[ $subject ] );
-		$response = rest_do_request( new WP_REST_Request( 'GET', sprintf( $format, $slug ) ) );
+		$inner    = preg_replace( '/-/', '/', $slug, 1 );
+		$response = rest_do_request( new WP_REST_Request( 'GET', sprintf( $format, $slug, $inner ) ) );
 
 		$this->assertSame( $expected_status, $response->get_status() );
 		if ( 404 === $expected_status ) {
@@ -172,6 +198,10 @@ class Test_Products_Query_Shapes extends WCPOS_REST_Unit_Test_Case {
 			'doubled slash visible_product'               => array( '/wc/store/v1/products//%s', 'visible_product', 200 ),
 			'unversioned trailing slash pos_only_product' => array( '/wc/store/products/%s/', 'pos_only_product', 404 ),
 			'unversioned trailing slash visible_product'  => array( '/wc/store/products/%s/', 'visible_product', 200 ),
+			'inner slash pos_only_product'                => array( '/wc/store/v1/products/%2$s', 'pos_only_product', 404 ),
+			'inner slash visible_product'                 => array( '/wc/store/v1/products/%2$s', 'visible_product', 200 ),
+			'unversioned inner slash pos_only_product'    => array( '/wc/store/products/%2$s/', 'pos_only_product', 404 ),
+			'unversioned inner slash visible_product'     => array( '/wc/store/products/%2$s/', 'visible_product', 200 ),
 		);
 	}
 
