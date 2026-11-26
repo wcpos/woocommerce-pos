@@ -427,6 +427,50 @@ class Test_Payment_Gateways_Section extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The settings read feeds checkout, order writes and receipts, so it never asks a
+	 * gateway whether its settings need finishing (a third-party check can block on a
+	 * remote call). A save does not store the admin-only field either.
+	 */
+	public function test_read_never_calls_needs_setup_and_write_does_not_store_it(): void {
+		$gateway     = new class() extends WC_Payment_Gateway {
+			/** No form fields. */
+			public function __construct() {
+				$this->id = 'wcpos_hot_path_gateway';
+			}
+
+			/**
+			 * Must not be called on the read path.
+			 *
+			 * @throws \LogicException Always.
+			 */
+			public function needs_setup() {
+				throw new \LogicException( 'needs_setup() called on the read path' );
+			}
+		};
+		$add_gateway = static function ( $gateways ) use ( $gateway ) {
+			return array_merge( $gateways, array( $gateway ) );
+		};
+		add_filter( 'woocommerce_payment_gateways', $add_gateway );
+
+		try {
+			$section  = new Payment_Gateways_Section();
+			$gateways = wcpos_get_settings( 'payment_gateways' )['gateways'];
+			$this->assertArrayHasKey( 'wcpos_hot_path_gateway', $gateways );
+			$this->assertArrayNotHasKey( 'needs_setup', $gateways['wcpos_hot_path_gateway'] );
+
+			$view = $section->read();
+			$view['gateways']['wcpos_hot_path_gateway']['needs_setup'] = true;
+			$section->write( $view );
+			$stored = get_option( 'woocommerce_pos_settings_payment_gateways' )['gateways'];
+			$this->assertArrayNotHasKey( 'needs_setup', $stored['wcpos_hot_path_gateway'] );
+		} finally {
+			remove_filter( 'woocommerce_payment_gateways', $add_gateway );
+			WC_Payment_Gateways::instance()->payment_gateways = array();
+			WC_Payment_Gateways::instance()->init();
+		}
+	}
+
+	/**
 	 * Register a stub gateway with the given public properties for the duration
 	 * of the callback, then restore the gateway registry.
 	 *

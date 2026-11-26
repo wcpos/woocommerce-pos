@@ -192,6 +192,7 @@ class Receipt_Data_Builder {
 		if ( ! empty( $row['breakdowns']['opening_float'] ) ) {
 			$row['breakdowns']['opening_float'] = $with_money( $row['breakdowns']['opening_float'], array( 'expected', 'counted', 'variance' ) );
 		}
+		$row['has_corrections_line'] = false;
 		foreach ( array(
 			'payment_methods' => array( 'sales', 'refunds' ),
 			'tax_rates' => array( 'net', 'tax', 'gross' ),
@@ -200,6 +201,10 @@ class Receipt_Data_Builder {
 			foreach ( $row['breakdowns'][ $section ] ?? array() as $key => $values ) {
 				if ( 'payment_methods' === $section ) {
 					$values['method'] = $values['method'] ?? (string) $key;
+					// A tender correction (#3647) prints its own signed line under the method.
+					$values['has_corrections'] = '' !== trim( (string) ( $values['corrections'] ?? '0' ), '-+0.' );
+					$values = $values['has_corrections'] ? $with_money( $values, array( 'corrections' ) ) : $values;
+					$row['has_corrections_line'] = $row['has_corrections_line'] || $values['has_corrections'];
 				}
 				$values['name'] = $values['name'] ?? $values['method'] ?? $values['rate'] ?? (string) $key;
 				$rows[] = $with_money( $values, $fields );
@@ -850,14 +855,8 @@ class Receipt_Data_Builder {
 				),
 			);
 		$ledger_rows = $order instanceof \WC_Order ? Ledger::instance()->read( $order ) : array();
-		$counting     = array_values(
-			array_filter(
-				$ledger_rows,
-				static function ( array $row ): bool {
-					return in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true );
-				}
-			)
-		);
+		// Where the money is: a corrected row and its R- print as nothing, its R+ as the payment (#3647).
+		$counting = Ledger::effective_rows( $ledger_rows );
 		if ( $ledger_rows ) {
 			$payments   = array();
 			$change_sum = 0.0;
@@ -1108,14 +1107,7 @@ class Receipt_Data_Builder {
 		$data['has_tax_summary'] = ! empty( $data['tax_summary'] );
 		$allocations = $refund->get_meta( '_wcpos_refund_allocations', true );
 		if ( ! $refund->meta_exists( '_wcpos_refund_allocations' ) ) {
-			$counting = array_values(
-				array_filter(
-					Ledger::instance()->read( $order ),
-					static function ( array $row ): bool {
-						return in_array( $row['status'] ?? '', Ledger::COUNTING_STATUSES, true );
-					}
-				)
-			);
+			$counting = Ledger::effective_rows( Ledger::instance()->read( $order ) );
 			$allocations = 1 === count( $counting ) ? array(
 				array(
 					'payment_id' => $counting[0]['id'],

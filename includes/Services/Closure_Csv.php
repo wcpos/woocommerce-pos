@@ -96,7 +96,7 @@ final class Closure_Csv {
 			}
 		}
 		foreach ( array(
-			'payment_methods' => array( 'sales', 'refunds' ),
+			'payment_methods' => array( 'sales', 'refunds', 'corrections' ),
 			'tax_rates' => array( 'net', 'tax', 'gross' ),
 		) as $section => $fields ) {
 			foreach ( $keys[ $section ] as $key => $suffix ) {

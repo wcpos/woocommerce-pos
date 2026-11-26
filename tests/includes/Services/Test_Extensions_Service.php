@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use WC_Payment_Gateway;
+use WC_Payment_Gateways;
 use WCPOS\WooCommercePOS\Services\Extensions;
 use WP_UnitTestCase;
 
@@ -30,6 +32,13 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 	private $mock_catalog_data = array();
 
 	/**
+	 * The `woocommerce_payment_gateways` callback a test registered, if any.
+	 *
+	 * @var callable|null
+	 */
+	private $stub_gateway_filter = null;
+
+	/**
 	 * Set up test fixtures.
 	 */
 	public function setUp(): void {
@@ -44,6 +53,11 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 	public function tearDown(): void {
 		delete_transient( 'wcpos_extensions_catalog' );
 		delete_site_option( 'auto_update_plugins' );
+		if ( $this->stub_gateway_filter ) {
+			remove_filter( 'woocommerce_payment_gateways', $this->stub_gateway_filter );
+			$this->stub_gateway_filter = null;
+			$this->reset_gateway_registry();
+		}
 		parent::tearDown();
 	}
 
@@ -368,6 +382,109 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'auto_update', $extensions[0] );
 
 		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
+	}
+
+	/**
+	 * An active payment extension reports only its gateway id; the card reads the rest
+	 * from the POS payment-gateways settings. needs_setup() is never called here.
+	 */
+	public function test_active_payment_extension_reports_its_gateway_id_only(): void {
+		$this->register_stub_gateway( 'wcpos_ext_gateway' );
+
+		$extension = $this->get_single_extension( 'payments', 'admin.php?page=wc-settings&tab=checkout&section=wcpos_ext_gateway' );
+
+		$this->assertSame( 'wcpos_ext_gateway', $extension['gateway_id'] );
+		$this->assertArrayNotHasKey( 'pos_enabled', $extension );
+		$this->assertArrayNotHasKey( 'needs_setup', $extension );
+	}
+
+	/**
+	 * No gateway id without a section in the settings URL, without that gateway in
+	 * the POS payment-gateways settings, for another category, or for an inactive extension.
+	 */
+	public function test_gateway_id_is_omitted_when_it_does_not_apply(): void {
+		$this->register_stub_gateway( 'wcpos_ext_gateway' );
+		$url = 'admin.php?page=wc-settings&tab=checkout&section=wcpos_ext_gateway';
+
+		$cases = array(
+			'no section'      => $this->get_single_extension( 'payments', 'admin.php?page=wc-settings&tab=checkout' ),
+			'no gateway'      => $this->get_single_extension( 'payments', 'admin.php?page=wc-settings&tab=checkout&section=wcpos_ext_missing' ),
+			'other category'  => $this->get_single_extension( 'catalog', $url ),
+			'inactive plugin' => $this->get_single_extension( 'payments', $url, false ),
+		);
+
+		foreach ( $cases as $label => $extension ) {
+			$this->assertArrayNotHasKey( 'gateway_id', $extension, $label );
+		}
+	}
+
+	/**
+	 * Fetch the extensions list for a one-entry catalog whose plugin is WooCommerce.
+	 *
+	 * @param string $category     Catalog category.
+	 * @param string $settings_url Catalog settings_url.
+	 * @param bool   $active       Whether the plugin is active.
+	 *
+	 * @return array The single extension entry.
+	 */
+	private function get_single_extension( string $category, string $settings_url, bool $active = true ): array {
+		update_option( 'active_plugins', $active ? array( 'woocommerce/woocommerce.php' ) : array() );
+		$this->mock_catalog_data = array(
+			array(
+				'slug'           => 'woocommerce',
+				'name'           => 'WooCommerce',
+				'category'       => $category,
+				'latest_version' => '0.0.1',
+				'settings_url'   => $settings_url,
+			),
+		);
+		delete_transient( 'wcpos_extensions_catalog' );
+		add_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ), 10, 3 );
+		$extensions = $this->service->get_extensions();
+		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
+
+		$this->assertCount( 1, $extensions );
+
+		return $extensions[0];
+	}
+
+	/**
+	 * Register a stub WooCommerce gateway for the rest of the test. Its needs_setup()
+	 * throws, so a test fails if the extensions list ever calls it.
+	 *
+	 * @param string $id Gateway id.
+	 */
+	private function register_stub_gateway( string $id ): void {
+		$gateway        = new class() extends WC_Payment_Gateway {
+			/** No form fields. */
+			public function __construct() {}
+
+			/**
+			 * Must not be called by the extensions list.
+			 *
+			 * @throws \LogicException Always.
+			 */
+			public function needs_setup() {
+				throw new \LogicException( 'needs_setup() called' );
+			}
+		};
+		$gateway->id    = $id;
+		$gateway->title = $id;
+
+		$this->stub_gateway_filter = static function ( $gateways ) use ( $gateway ) {
+			return array_merge( $gateways, array( $gateway ) );
+		};
+		add_filter( 'woocommerce_payment_gateways', $this->stub_gateway_filter );
+		$this->reset_gateway_registry();
+	}
+
+	/**
+	 * Rebuild WooCommerce's gateway list from the current filters.
+	 */
+	private function reset_gateway_registry(): void {
+		$registry                   = WC_Payment_Gateways::instance();
+		$registry->payment_gateways = array();
+		$registry->init();
 	}
 
 	/**

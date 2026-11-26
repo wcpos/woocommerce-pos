@@ -136,6 +136,9 @@ class Extensions {
 
 		$extensions = array();
 
+		// Read once, and only when an active payment extension needs it: the read re-inits WooCommerce's gateways.
+		$pos_gateways = null;
+
 		foreach ( $catalog as $entry ) {
 			$slug        = $entry['slug'] ?? '';
 			$plugin_file = $this->find_plugin_file( $slug, $installed_plugins );
@@ -170,6 +173,11 @@ class Extensions {
 				if ( ! empty( $entry['settings_url'] ) && \is_string( $entry['settings_url'] ) ) {
 					$entry['settings_url'] = admin_url( $entry['settings_url'] );
 				}
+
+				if ( $is_active && 'payments' === ( $entry['category'] ?? '' ) ) {
+					$pos_gateways = $pos_gateways ?? Settings::instance()->get_payment_gateways_settings();
+					$entry        = array_merge( $entry, $this->pos_gateway( $entry, $pos_gateways ) );
+				}
 			}
 
 			$entry['status'] = $status;
@@ -177,6 +185,23 @@ class Extensions {
 		}
 
 		return $extensions;
+	}
+
+	/**
+	 * The POS payment gateway of an active payment extension: the `section` of its
+	 * catalog WooCommerce settings URL, kept only when the POS payment-gateways
+	 * settings list that gateway. The card reads everything else from those settings.
+	 *
+	 * @param array $entry        Catalog entry.
+	 * @param array $pos_gateways The POS payment-gateways settings view.
+	 *
+	 * @return array `gateway_id`, or nothing.
+	 */
+	private function pos_gateway( array $entry, array $pos_gateways ): array {
+		wp_parse_str( (string) wp_parse_url( (string) ( $entry['settings_url'] ?? '' ), PHP_URL_QUERY ), $query );
+		$gateway_id = \is_string( $query['section'] ?? null ) ? $query['section'] : '';
+
+		return '' !== $gateway_id && isset( $pos_gateways['gateways'][ $gateway_id ] ) ? array( 'gateway_id' => $gateway_id ) : array();
 	}
 
 	/**

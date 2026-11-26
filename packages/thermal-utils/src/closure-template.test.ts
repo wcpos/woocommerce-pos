@@ -289,3 +289,31 @@ it('normalizes offline labels and amounts using the currency snapshot without in
 		],
 	});
 });
+
+it('derives a corrections line for a stamped closure, as the PHP document builder does', () => {
+	const input = {
+		order: { currency: 'USD' },
+		fiscal: { is_closure_document: true },
+		i18n: { corrections: 'Corrections' },
+		closure: {
+			breakdowns: {
+				payment_methods: {
+					cash: { sales: '12', refunds: '0', corrections: '-12' },
+					pos_card: { method: 'pos_card', sales: '0', refunds: '0', corrections: '12' },
+					voucher: { sales: '3', refunds: '0', corrections: '0.0000' },
+				},
+			},
+		},
+	};
+	const closure = sanitizeReceiptDataForRendering(structuredClone(input)).closure as Record<string, any>;
+	const [cash, card, voucher] = closure.breakdowns.payment_methods;
+	for (const row of [cash, card]) {
+		expect(row.has_corrections).toBe(true);
+		expect(row.corrections_display).toBeTruthy();
+	}
+	expect(closure.has_corrections_line).toBe(true);
+	expect(voucher.has_corrections).toBe(false);
+	expect(voucher).not.toHaveProperty('corrections_display');
+	const template = fs.readFileSync(path.join(gallery, 'closure-default.html'), 'utf8');
+	expect(renderLogiclessPreview(template, structuredClone(input))).toContain('Corrections');
+});

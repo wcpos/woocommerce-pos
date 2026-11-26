@@ -108,7 +108,9 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H 213.239.218.130 >> ~/.ssh/known_hosts
+          # Pinned server host key (public). If the server is rebuilt the deploy fails here:
+          # read the new key on the server itself, never from ssh-keyscan.
+          echo '213.239.218.130 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKbmOb9Bic/JfkQtj4L7Bjd4kk5nuRv++77tU6l3v822' > ~/.ssh/known_hosts
 
       - name: 🚀 Deploy to dev sites
         env:
@@ -165,14 +167,53 @@ jobs:
               # inside it (bash errexit rule) — every critical command carries an
               # explicit `|| exit 1` instead.
               if (
-                PLUGIN_DIR="/data/wordpress/${SITE}/html/wp-content/plugins/woocommerce-pos"
+                SLUG="woocommerce-pos"
+                PLUGINS="/data/wordpress/${SITE}/html/wp-content/plugins"
+                STAGE="/data/wordpress/.wcpos-deploy"
+                TMP_DIR="${STAGE}/${SITE}.${SLUG}.${RUN_ID}"
+                OLD_DIR="${STAGE}/${SITE}.${SLUG}.old"
+                umask 022
 
-                rm -rf "$PLUGIN_DIR" || exit 1
-                mkdir -p "$PLUGIN_DIR" || exit 1
-                tar -xzf "/tmp/${TARBALL}" -C "$PLUGIN_DIR" || exit 1
-                echo "$RUN_ID" > "$PLUGIN_DIR/.wcpos-deploy-run" || exit 1
+                # The copy is made where only this user can write.
+                mkdir -p -m 700 "$STAGE" || exit 1
+                if [ -L "$STAGE" ] || [ ! -O "$STAGE" ] || [ "$(stat -c %a "$STAGE")" != 700 ]; then
+                  echo "❌ ${SITE}: ${STAGE} must be a mode 700 directory of this user" >&2
+                  exit 1
+                fi
+                # Stay in the real plugins directory from here on, and only rename in and out of it.
+                cd "$PLUGINS" || exit 1
+                MOUNT=$(findmnt -no TARGET -T "$STAGE")
+                if [ "$(/bin/pwd -P)" != "$PLUGINS" ] || [ "$(stat -c %d .)" != "$(stat -c %d "$STAGE")" ] ||
+                  [ -z "$MOUNT" ] || [ "$(findmnt -no TARGET -T "$(/bin/pwd -P)")" != "$MOUNT" ]; then
+                  echo "❌ ${SITE}: ${PLUGINS} must be a real path on the mount of ${STAGE}" >&2
+                  exit 1
+                fi
+                # Put the live copy back if this run, or a killed one, stopped between the two moves below.
+                there() { [ -e "$1" ] || [ -L "$1" ]; }
+                put_back() { there "$SLUG" || ! there "$OLD_DIR" || mv -T "$OLD_DIR" "$SLUG"; }
+                trap 'put_back || true; rm -rf "$TMP_DIR"' EXIT
+                put_back || exit 1
+                rm -rf "$TMP_DIR" "$OLD_DIR" || exit 1
+                mkdir "$TMP_DIR" || exit 1
+                tar --no-same-owner --no-same-permissions -xzf "/tmp/${TARBALL}" -C "$TMP_DIR" || exit 1
 
-                chown -R 82:82 "$PLUGIN_DIR" || exit 1
+                # This runs as root on the host: only files, directories and links that stay inside, no loose modes.
+                BAD=$(find "$TMP_DIR" -type l \( -lname '/*' -o -lname '*..*' \) \
+                  -o ! -type l \( ! -type f ! -type d -o -perm /6022 \)) || exit 1
+                if [ -n "$BAD" ]; then
+                  echo "❌ ${SITE}: package rejected:" >&2
+                  echo "$BAD" >&2
+                  exit 1
+                fi
+                rm -rf "$TMP_DIR/.wcpos-deploy-run" || exit 1
+                echo "$RUN_ID" > "$TMP_DIR/.wcpos-deploy-run" || exit 1
+                chown -R 82:82 "$TMP_DIR" || exit 1
+
+                if there "$SLUG"; then
+                  mv -T "$SLUG" "$OLD_DIR" || exit 1
+                fi
+                mv -T "$TMP_DIR" "$SLUG" || exit 1
+                rm -rf "$OLD_DIR" || exit 1
 
                 # A green extract is not proof the runtime picked it up: php-fpm
                 # reads the html tree through its own bind mount, which can hold

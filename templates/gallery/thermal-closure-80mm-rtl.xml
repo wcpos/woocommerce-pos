@@ -52,7 +52,7 @@ these star columns with hard-coded widths.
   <line /><align mode="right"><bold><text>{{i18n.tenders}}</text></bold></align>
   {{#closure.has_payment_methods}}
   <row><col width="*" align="left">{{i18n.refunds}}</col><col width="*" align="left">{{i18n.sales}}</col><col width="*" align="right">{{i18n.payment_method}}</col></row>
-  {{#closure.breakdowns.payment_methods}}<row><col width="*" align="left">{{refunds_display}}</col><col width="*" align="left">{{sales_display}}</col><col width="*" align="right">{{#name}}{{name}}{{/name}}{{^name}}{{method}}{{/name}}</col></row>{{/closure.breakdowns.payment_methods}}
+  {{#closure.breakdowns.payment_methods}}<row><col width="*" align="left">{{refunds_display}}</col><col width="*" align="left">{{sales_display}}</col><col width="*" align="right">{{#name}}{{name}}{{/name}}{{^name}}{{method}}{{/name}}</col></row>{{#has_corrections}}<row><col width="*" align="left"></col><col width="*" align="left">{{corrections_display}}</col><col width="*" align="right">{{i18n.corrections}}  </col></row>{{/has_corrections}}{{/closure.breakdowns.payment_methods}}
   {{/closure.has_payment_methods}}
   <row><col width="*" align="left">{{i18n.variance}}</col><col width="*" align="left">{{i18n.counted}}</col><col width="*" align="left">{{i18n.expected}}</col><col width="*" align="right">{{i18n.tender}}</col></row>
   {{#closure.tenders}}<row><col width="*" align="left">{{variance_display}}</col><col width="*" align="left">{{counted_display}}</col><col width="*" align="left">{{expected_display}}</col><col width="*" align="right">{{label}}</col></row>{{/closure.tenders}}

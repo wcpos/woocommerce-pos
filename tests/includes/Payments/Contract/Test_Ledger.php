@@ -2697,6 +2697,28 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		return array( 'CPT' => array( false ), 'HPOS' => array( true ) );
 	}
 
+	/** @dataProvider effective_index_cases */
+	public function test_correct_payment_method_index_holds_only_effective_methods( bool $hpos, array $legs, ?string $target, array $expected ): void {
+		if ( $hpos ) { add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); $this->setup_cot(); $this->toggle_cot_feature_and_usage( true ); $this->disable_cot_sync(); }
+		try {
+			remove_all_filters( 'wcpos_payment_method_capture_mode' ); // setUp makes pos_card a provider mode; a correctable card is manual.
+			$order = $this->create_pos_order(); $order->set_total( '10.00' ); $order->save();
+			foreach ( $legs as $leg ) { $row = Ledger::instance()->record( $order, $this->payment( ...$leg ) ); }
+			if ( $target ) { $this->assertIsArray( Ledger::instance()->correct( $order, $row['id'], $target ) ); }
+			$this->assertEqualsCanonicalizing( $expected, $this->index_values( wc_get_order( $order->get_id() ) ) ); // HPOS reloads in another order.
+		} finally {
+			if ( $hpos ) { $this->toggle_cot_feature_and_usage( false ); $this->clean_up_cot_setup(); remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' ); }
+		}
+	}
+
+	public function effective_index_cases(): array {
+		foreach ( $this->persistence_storage() as $storage => list( $hpos ) ) {
+			$cases[ "$storage card to cash" ] = array( $hpos, array( array( 'pos_card', '10.00' ) ), 'pos_cash', array( 'pos_cash' ) ); $cases[ "$storage cash to card" ] = array( $hpos, array( array( 'pos_cash', '10.00' ) ), 'pos_card', array( 'pos_card' ) );
+			$cases[ "$storage uncorrected" ] = array( $hpos, array( array( 'pos_cash', '10.00' ) ), null, array( 'pos_cash' ) ); $cases[ "$storage split" ] = array( $hpos, array( array( 'pos_cash', '4.00' ), array( 'pos_card', '6.00' ) ), null, array( 'pos_cash', 'pos_card' ) );
+		}
+		return $cases;
+	}
+
 	/** @dataProvider duplicate_order_lanes */
 	public function test_order_save_drops_duplicate_payment_ids( bool $existing ): void {
 		$order = $existing ? wc_create_order() : new \WC_Order();

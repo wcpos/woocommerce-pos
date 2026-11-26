@@ -293,7 +293,13 @@ export function sanitizeReceiptDataForRendering(
 		const rows = recordEntries(breakdowns[section]);
 		closure[`has_${section}`] ??= rows.length > 0;
 		breakdowns[section] = rows.map(([key, row]) => {
-			if (section === 'payment_methods') row.method ??= key;
+			if (section === 'payment_methods') {
+				row.method ??= key;
+				// A tender correction (#3647) prints its own signed line, as Receipt_Data_Builder does.
+				row.has_corrections ??=
+					String(row.corrections ?? '0').replace(/^[-+0.]+|[-+0.]+$/g, '') !== '';
+				if (row.has_corrections) withMoney(row, ['corrections']);
+			}
 			if (section !== 'movements') row.name ??= row.method ?? row.rate ?? key;
 			else {
 				row.created_at ??= date(row.created_at_gmt);
@@ -303,6 +309,9 @@ export function sanitizeReceiptDataForRendering(
 			return withMoney(row, fields);
 		});
 	}
+	closure.has_corrections_line ??= (breakdowns.payment_methods as Record<string, unknown>[]).some(
+		(row) => Boolean(row.has_corrections)
+	);
 	closure.has_sales ??=
 		closure.period_sales_total != null ||
 		closure.period_refunds_total != null ||

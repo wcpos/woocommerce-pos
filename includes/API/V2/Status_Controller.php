@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API\V2;
 
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
 use WCPOS\WooCommercePOS\Sync\Health;
@@ -28,6 +29,8 @@ final class Status_Controller extends WP_REST_Controller {
 	 *   is answered from one query (#2113).
 	 * - `order_cashier_reassignment`: authorized users may reassign a sale to another POS user.
 	 * - `order_sale_day_correction`: authorized users may correct the day a paid sale counts on.
+	 * - `tender_correction`: `POST /wcpos/v2/orders/{id}/payments/{uuid}/correct` (#3647). Added by `get_status()`
+	 *   only while no fiscal module is active, so it is not in this list.
 	 *
 	 * Append new names; never rename or remove one.
 	 */
@@ -70,7 +73,7 @@ final class Status_Controller extends WP_REST_Controller {
 				'healthy'        => array() === $missing_tables,
 				'missing_tables' => $missing_tables,
 				'schema_version' => get_option( Api::SCHEMA_OPTION, null ),
-				'capabilities'   => self::CAPABILITIES,
+				'capabilities'   => Ledger::tender_correction_available() ? array_merge( self::CAPABILITIES, array( 'tender_correction' ) ) : self::CAPABILITIES,
 			),
 			200
 		);

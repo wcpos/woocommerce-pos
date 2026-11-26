@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Gateways;
 use WCPOS\WooCommercePOS\Logger;
 
 /**
@@ -26,6 +27,10 @@ final class Closure_Store {
 	 * real run of offline closes, narrow enough that a cashier cannot push the sequence
 	 * toward the 18-digit limit. */
 	private const MAX_NUMBER_JUMP = 10000;
+
+	/** The app's key for a tender key: tender_key() folds only pos_card into card, and the app
+	 * keys non-cash rows by gateway id (monorepo session-store.ts), so an appended row uses it. */
+	private const APP_TENDER_KEYS = array( 'card' => 'pos_card' );
 
 	/** Most CAST terms in one query. Long `+` chains overrun MariaDB's thread stack and can kill the server (#2590). */
 	private const SUM_CHUNK_SIZE = 100;
@@ -759,6 +764,41 @@ final class Closure_Store {
 			}
 			$figures = Session_Figures::for_session( $session );
 			$fields['expected'] = $figures->expected();
+			// A corrected tender (#3647) stores the session terms' gross sales, refunds and corrections in place
+			// of the app's net row: each corrected tender's sales - refunds + corrections equals its expected
+			// (for cash, add the opening float and paid in/out). The server owns corrections.
+			// A closure sent no tender rows (a carry) keeps none: a table of the corrected tenders alone would leave out the others.
+			$tenders = array_filter( $figures->payment_methods(), static fn( $tender ) => '0.0000' !== $tender['corrections'] );
+			$gross   = array_flip( array( 'sales', 'refunds', 'corrections' ) );
+			$methods = $fields['breakdowns']['payment_methods'] ?? null;
+			if ( is_array( $methods ) && $methods ) {
+				// A non-empty list stays a list; the app's map keys a card row by gateway id (pos_card), matched by tender key.
+				$is_list = array_keys( $methods ) === range( 0, count( $methods ) - 1 );
+				foreach ( $methods as $key => $method ) {
+					if ( ! is_array( $method ) ) {
+						continue;
+					}
+					unset( $methods[ $key ]['corrections'] );
+					if ( isset( $method['method'] ) && ! is_scalar( $method['method'] ) ) {
+						continue;
+					}
+					$tender = Session_Figures::tender_key( array( 'method' => (string) ( $method['method'] ?? $key ) ) );
+					if ( isset( $tenders[ $tender ] ) ) {
+						$methods[ $key ] = array_replace( $methods[ $key ], array_intersect_key( $tenders[ $tender ], $gross ) );
+						unset( $tenders[ $tender ] );
+					}
+				}
+				$gateways = $tenders ? Gateways::registered() : array();
+				foreach ( $tenders as $tender => $figure ) {
+					$app_key = self::APP_TENDER_KEYS[ $tender ] ?? (string) $tender;
+					$name    = '' !== $figure['name'] ? $figure['name'] : ( isset( $gateways[ $app_key ] ) ? $gateways[ $app_key ]->get_title() : '' );
+					$methods[ $is_list ? count( $methods ) : $app_key ] = array(
+						'method' => $app_key,
+						'name'   => $name,
+					) + array_intersect_key( $figure, $gross );
+				}
+				$fields['breakdowns']['payment_methods'] = $methods;
+			}
 			// A carry counts the drawer at the snapshot's own expected: no count is taken outside it.
 			$fields['counted'] = $fields['counted'] ?? $fields['expected'];
 			$fields['till_expected'] = $fields['till_expected'] ?? $fields['expected'];

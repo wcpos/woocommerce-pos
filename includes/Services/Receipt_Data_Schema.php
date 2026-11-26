@@ -1517,6 +1517,7 @@ class Receipt_Data_Schema {
 					'name' => __( 'Payment Method', 'woocommerce-pos' ),
 					'sales' => __( 'Sales', 'woocommerce-pos' ),
 					'refunds' => __( 'Refunds', 'woocommerce-pos' ),
+					'corrections' => __( 'Corrections', 'woocommerce-pos' ),
 				),
 				'tax_rates' => array(
 					'name' => __( 'Tax Rate', 'woocommerce-pos' ),
@@ -1544,6 +1545,14 @@ class Receipt_Data_Schema {
 					);
 				}
 			}
+			$tree['closure.breakdowns.payment_methods']['fields']['has_corrections'] = array(
+				'type'  => 'boolean',
+				'label' => __( 'Non-zero Corrections', 'woocommerce-pos' ),
+			);
+			$tree['closure']['fields']['has_corrections_line'] = array(
+				'type'  => 'boolean',
+				'label' => __( 'Any Tender Corrected', 'woocommerce-pos' ),
+			);
 			$tree['closure.breakdowns.cashiers'] = array(
 				'label'    => __( 'Cashiers', 'woocommerce-pos' ),
 				'is_array' => true,
