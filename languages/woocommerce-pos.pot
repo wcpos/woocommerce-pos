@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-26T10:38:52+00:00\n"
+"POT-Creation-Date: 2026-11-26T16:46:07+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -161,7 +161,7 @@ msgid "Search for a cashier&hellip;"
 msgstr ""
 
 #: includes/Admin/Orders/Single_Order.php:117
-#: includes/API/V2/Writers/Order_Writer.php:927
+#: includes/API/V2/Writers/Order_Writer.php:967
 msgid "POS cashier or store change was not applied because its change record could not be written. Try again."
 msgstr ""
 
@@ -1238,7 +1238,7 @@ msgstr ""
 msgid "WCPOS: stock for %1$s could not be adjusted by %2$s; reconcile the product's stock manually."
 msgstr ""
 
-#: includes/API/V2/Writers/Order_Writer.php:858
+#: includes/API/V2/Writers/Order_Writer.php:898
 msgid "POS sale day change was not applied because its change record could not be written. Try again."
 msgstr ""
 
@@ -5200,6 +5200,10 @@ msgstr ""
 #: includes/Services/Template_Pdf_Service.php:147
 #, php-format
 msgid "WP Overnight %s PDF could not be generated."
+msgstr ""
+
+#: includes/Services/Unverified_Refund_Guard.php:58
+msgid "This payment was recorded by hand, so its payment provider never took it and cannot refund it. Refund it to another payment method."
 msgstr ""
 
 #: includes/Storefront_Receipts.php:38
