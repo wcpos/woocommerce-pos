@@ -281,7 +281,9 @@ class Test_Withheld_Cost_Parity extends Sync_REST_Store_Test_Case {
 		$this->sign_in_with_token( $this->cashier );
 		list( $status, $body ) = $this->serve( $update( 999 ) );
 		// Assert.
-		$this->assertLessThan( 300, $status, wp_json_encode( $body ) );
+		// WooCommerce accepts this cashier's order edit under posts storage and refuses it under HPOS (woocommerce_rest_cannot_edit);
+		// either way the stored total cost must not change.
+		$this->assertContains( $status, array( 200, 403 ), wp_json_encode( $body ) );
 		$this->assertSame( $before, $this->order_total_cost( $order_id ), 'cashier total cost must be ignored' );
 		// Act.
 		$this->sign_in_with_token( $this->user );
