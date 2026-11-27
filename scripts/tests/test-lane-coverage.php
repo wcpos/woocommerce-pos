@@ -94,6 +94,37 @@ class Test_Lane_Coverage_Helper_Fixture {
 		$this->request( $route );
 	}
 }
+
+class Test_Lane_Storefront_Fixture {
+	private function get( $route ) {
+		return new \WP_REST_Request( 'GET', $route );
+	}
+
+	public function test_storefront_store_api_via_helper() {
+		$this->get( '/wc/store/v1/products/reviews' );
+	}
+
+	public function test_storefront_oembed_via_helper() {
+		$this->get( '/oembed/1.0/embed' );
+	}
+
+	public function test_storefront_wp_v2_via_helper() {
+		$this->get( '/wp/v2/product/42' );
+	}
+
+	public function test_storefront_direct_store_api_dispatch() {
+		$this->wp_rest_get_request( '/wc/store/v1/cart' );
+	}
+
+	public function test_storefront_unknown_namespace_stays_unresolved() {
+		$this->get( '/acme/v1/things' );
+	}
+
+	public function test_storefront_own_runtime_route_stays_unresolved() {
+		new \WP_REST_Request( 'GET', $route );
+		$this->get( '/wp/v2/product/42' );
+	}
+}
 PHP;
 
 file_put_contents( $test_dir . '/Test_Lane_Coverage_Fixture.php', $fixture );
@@ -186,6 +217,12 @@ $expected = array(
 	'test_live_v1_subtree_dynamic_descendant' => array( array( 'v1' ), false, false ),
 	'test_live_v1_subtree_prefix_collision' => array( array( 'v1' ), true, false ),
 	'test_unresolved_helper_route'     => array( array( 'unresolved' ), false, true ),
+	'test_storefront_store_api_via_helper' => array( array( 'storefront', 'unresolved' ), false, false ),
+	'test_storefront_oembed_via_helper' => array( array( 'storefront', 'unresolved' ), false, false ),
+	'test_storefront_wp_v2_via_helper' => array( array( 'unresolved', 'wp2' ), false, false ),
+	'test_storefront_direct_store_api_dispatch' => array( array( 'storefront', 'unresolved' ), false, false ),
+	'test_storefront_unknown_namespace_stays_unresolved' => array( array( 'unresolved' ), false, true ),
+	'test_storefront_own_runtime_route_stays_unresolved' => array( array( 'unresolved', 'wp2' ), false, true ),
 );
 
 foreach ( $expected as $method => $assertion ) {
@@ -196,6 +233,21 @@ foreach ( $expected as $method => $assertion ) {
 		fwrite( STDERR, $method . ': expected ' . json_encode( $assertion ) . ', got ' . json_encode( $actual ) . "\n" );
 		exit( 1 );
 	}
+}
+
+foreach ( array_keys( $expected ) as $method ) {
+	$storefront = in_array( $method, array(
+		'test_storefront_store_api_via_helper', 'test_storefront_oembed_via_helper',
+		'test_storefront_wp_v2_via_helper', 'test_storefront_direct_store_api_dispatch',
+	), true );
+	if ( $storefront !== $cases[ $method ]['storefront'] ) {
+		fwrite( STDERR, $method . ': expected storefront ' . json_encode( $storefront ) . "\n" );
+		exit( 1 );
+	}
+}
+if ( 4 !== $inventory['summary']['storefront'] ) {
+	fwrite( STDERR, 'Expected summary storefront 4, got ' . json_encode( $inventory['summary']['storefront'] ) . "\n" );
+	exit( 1 );
 }
 
 echo count( $expected ) . " lane-coverage scanner regression tests passed.\n";

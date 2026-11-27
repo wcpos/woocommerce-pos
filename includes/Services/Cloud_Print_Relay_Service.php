@@ -48,20 +48,29 @@ class Cloud_Print_Relay_Service {
 	}
 
 	/**
-	 * Return the pending verification token, if a registration is in flight.
+	 * Return the pending verification token to the caller that holds its challenge.
+	 *
+	 * The route is public, so the token goes only to a caller presenting the
+	 * challenge register_site() sent the relay. Any other read gets nothing and
+	 * uses nothing up: a stranger can neither take the token (and replay it at
+	 * the relay's own public register endpoint) nor burn it before the relay's
+	 * callback arrives.
+	 *
+	 * @param string $challenge Challenge presented by the caller.
 	 *
 	 * @return string|null
 	 */
-	public static function pending_verification_token(): ?string {
-		$token = get_transient( self::VERIFY_TRANSIENT );
-		if ( false === $token ) {
+	public static function pending_verification_token( string $challenge ): ?string {
+		$pending = get_transient( self::VERIFY_TRANSIENT );
+		$stored  = \is_array( $pending ) ? (string) ( $pending['challenge'] ?? '' ) : '';
+		if ( '' === $stored || '' === $challenge || ! hash_equals( $stored, $challenge ) ) {
 			return null;
 		}
 		// Single-use: consumed on first read, so a second reader (or a racing
 		// registration attempt for this site) cannot replay the proof.
 		delete_transient( self::VERIFY_TRANSIENT );
 
-		return (string) $token;
+		return (string) ( $pending['token'] ?? '' );
 	}
 
 	/**
@@ -92,11 +101,19 @@ class Cloud_Print_Relay_Service {
 			);
 		}
 		try {
-			$token = bin2hex( random_bytes( 24 ) );
+			$token     = bin2hex( random_bytes( 24 ) );
+			$challenge = bin2hex( random_bytes( 24 ) );
 		} catch ( \Exception $exception ) {
 			return self::registration_error( __( 'Could not create a relay verification token.', 'woocommerce-pos' ) );
 		}
-		set_transient( self::VERIFY_TRANSIENT, $token, 5 * MINUTE_IN_SECONDS );
+		set_transient(
+			self::VERIFY_TRANSIENT,
+			array(
+				'token'     => $token,
+				'challenge' => $challenge,
+			),
+			5 * MINUTE_IN_SECONDS
+		);
 		$response = wp_remote_post(
 			self::relay_url() . '/api/register',
 			array(
@@ -104,8 +121,10 @@ class Cloud_Print_Relay_Service {
 				'headers' => array( 'Content-Type' => 'application/json' ),
 				'body'    => wp_json_encode(
 					array(
-						'site_url'     => $site_url,
-						'verify_token' => $token,
+						'site_url'         => $site_url,
+						'verify_token'     => $token,
+						// The relay presents this on its verification callback.
+						'verify_challenge' => $challenge,
 					)
 				),
 			)

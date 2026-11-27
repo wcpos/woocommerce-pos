@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-26T16:46:07+00:00\n"
+"POT-Creation-Date: 2026-11-27T11:52:03+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -776,11 +776,11 @@ msgstr ""
 msgid "Star CloudPRNT printers require order-based template jobs or a raw payload."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1223
+#: includes/API/V1/Print_Jobs_Controller.php:1226
 msgid "No relay verification is pending."
 msgstr ""
 
-#: includes/API/V1/Print_Jobs_Controller.php:1263
+#: includes/API/V1/Print_Jobs_Controller.php:1266
 msgid "Sorry, you cannot manage print jobs."
 msgstr ""
 
@@ -1828,23 +1828,23 @@ msgstr ""
 msgid "The closure number precedes the register sequence."
 msgstr ""
 
-#: includes/Services/Cloud_Print_Relay_Service.php:80
+#: includes/Services/Cloud_Print_Relay_Service.php:89
 msgid "WCPOS Cloud Print is disabled on this site."
 msgstr ""
 
-#: includes/Services/Cloud_Print_Relay_Service.php:90
+#: includes/Services/Cloud_Print_Relay_Service.php:99
 msgid "WCPOS Cloud Print needs your site to use HTTPS. Set the Site Address (URL) in Settings > General to an https:// address, then try again."
 msgstr ""
 
-#: includes/Services/Cloud_Print_Relay_Service.php:97
+#: includes/Services/Cloud_Print_Relay_Service.php:107
 msgid "Could not create a relay verification token."
 msgstr ""
 
-#: includes/Services/Cloud_Print_Relay_Service.php:123
+#: includes/Services/Cloud_Print_Relay_Service.php:142
 msgid "Relay registration failed."
 msgstr ""
 
-#: includes/Services/Cloud_Print_Relay_Service.php:130
+#: includes/Services/Cloud_Print_Relay_Service.php:149
 msgid "Relay registration returned invalid credentials."
 msgstr ""
 
