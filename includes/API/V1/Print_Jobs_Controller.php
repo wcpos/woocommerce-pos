@@ -1213,10 +1213,13 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	/**
 	 * Serve the pending relay verification token (public; consent callback).
 	 *
+	 * @param \WP_REST_Request $request Request carrying the relay's `challenge`.
+	 *
 	 * @return \WP_REST_Response|WP_Error
 	 */
-	public function relay_verification() {
-		$token = Cloud_Print_Relay_Service::pending_verification_token();
+	public function relay_verification( $request ) {
+		$challenge = $request->get_param( 'challenge' );
+		$token     = Cloud_Print_Relay_Service::pending_verification_token( \is_string( $challenge ) ? $challenge : '' );
 		if ( null === $token ) {
 			return new WP_Error(
 				'wcpos_relay_no_pending_verification',
