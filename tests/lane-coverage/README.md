@@ -28,6 +28,7 @@ The client (`wcpos/monorepo`, `next`) calls three namespaces:
 | `wc/v3` | **current** | Called directly by the client, and proxied to by v2. ~109 references. |
 | `wcpos/v1` | **frozen** | Legacy. Exactly one route is still live: `wcpos/v1/products/variations`, used by the sync census for its `X-WP-Total` head-count. |
 | — | unresolved | The route is assembled at runtime, so it cannot be resolved from literals. Not claimed to be v1 — just unproven. |
+| `wc/store`, `oembed`, `wp/v2` | out of scope | Storefront routes the app does not call. Counted and listed as `storefront`, never gated. A case that builds its own route at runtime stays unresolved. |
 | — | pure unit | Dispatches no REST route; classification is not applicable. |
 
 `wcpos/v1/products/variations` is allowlisted in the scanner (`CURRENT_V1_ROUTES`). A test
@@ -67,7 +68,7 @@ Deliberately simple, because the failure mode being prevented is false confidenc
 scanner (`scripts/lane-coverage.php`) tokenises every file under `tests/` with PHP's own
 `token_get_all()` and records, per test case, two kinds of lane signal:
 
-1. **Route literals** — any string containing `wcpos/v1`, `wcpos/v2`, `wc/v3` or `wp/v2`.
+1. **Route literals** — any string containing `wcpos/v1`, `wcpos/v2`, `wc/v3`, `wp/v2`, `wc/store/` or `oembed/1.0`.
 2. **Controller references** — any `use` import or FQCN mentioning `\API\V1\` or `\API\V2\`.
 
 Signal 2 matters more than it looks. A case can carry no route literal at all and still be
@@ -83,6 +84,7 @@ A case is **v1-only** when it has a `v1` signal, has no `v2` or `wc3` signal, an
 provably confined to the allowlisted live v1 route. It is **unresolved** when its route could
 not be read from literals and nothing else proves it current. `v1-only` is a positive claim
 and stays provable; `unresolved` is an admission of ignorance. The gate treats them alike.
+A case is **storefront** when it has only storefront lanes and no runtime route of its own.
 
 ### Known limitations — read these before trusting a number
 
