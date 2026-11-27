@@ -88,6 +88,21 @@ final class Permission_Registry {
 				'split_from' => null,
 			);
 		}
+		// Data permissions close the wcpos API group, so registry order stays API order.
+		$after_wcpos = 1 + (int) array_search( 'reassign_woocommerce_pos_sales', array_column( $entries, 'capability' ), true );
+		$data        = array(
+			array(
+				'capability' => 'view_woocommerce_pos_costs',
+				'row'        => 'view_costs',
+				'group'      => 'products',
+				'kind'       => 'data',
+				'tier'       => 'store',
+				'defaults'   => $all,
+				'introduced' => '2.2.0',
+				'split_from' => null,
+			),
+		);
+		array_splice( $entries, $after_wcpos, 0, $data );
 		return array_merge( $entries, self::$test_entries );
 	}
 
@@ -132,6 +147,7 @@ final class Permission_Registry {
 			'reports'           => __( 'Reports', 'woocommerce-pos' ),
 			'approve_variance'  => __( 'Approve a variance or recount', 'woocommerce-pos' ),
 			'reassign_sales'    => __( "Reassign a sale's cashier", 'woocommerce-pos' ),
+			'view_costs'        => __( 'See cost, profit and margin', 'woocommerce-pos' ),
 			'add_customer'      => __( 'Add a customer', 'woocommerce-pos' ),
 			'edit_products'     => __( 'Edit products', 'woocommerce-pos' ),
 			'delete_products'   => __( 'Delete products', 'woocommerce-pos' ),

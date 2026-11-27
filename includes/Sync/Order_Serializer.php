@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\Sync;
 use WC_Order;
 use WC_REST_Orders_Controller;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
+use WCPOS\WooCommercePOS\Services\Withheld_Fields;
 use WP_REST_Request;
 final class Order_Serializer {
 	/**
@@ -497,6 +498,7 @@ final class Order_Serializer {
 	 * @param bool  $allow_list Hash only allow-listed order meta; lines also keep every visible key.
 	 */
 	private static function form( array $payload, bool $allow_list ): array {
+		$payload = Withheld_Fields::project_for_revision( $payload );
 		// WooCommerce merges register_rest_field additions inside get_item_schema().
 		$controller = new class() extends WC_REST_Orders_Controller {
 			/** Keep the core schema; extensions opt in through the revision-fields filter. */
