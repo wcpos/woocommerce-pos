@@ -299,7 +299,7 @@ Full details are in the [privacy policy](https://wcpos.com/privacy).
 
 Older releases are listed on [GitHub](https://github.com/wcpos/woocommerce-pos/releases).
 
-= 2.0.6 - 2026/11/25 =
+= 2.0.6 - 2026/11/27 =
 
 Paying for orders, the POS login and manager approvals are better protected, and WCPOS is now tested with WordPress 7.2.
 
