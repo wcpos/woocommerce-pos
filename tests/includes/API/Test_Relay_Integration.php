@@ -160,6 +160,22 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Dispatch the verification callback signed out, as the relay and any stranger are.
+	 *
+	 * @param string|null $challenge Challenge to present, or null for none.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	private function verify_as_guest( ?string $challenge ) {
+		$user_id = get_current_user_id();
+		wp_set_current_user( 0 );
+		$response = rest_do_request( $this->verification_request( $challenge ) );
+		wp_set_current_user( $user_id );
+
+		return $response;
+	}
+
+	/**
 	 * Store a registration in flight.
 	 */
 	private function store_pending_verification(): void {
@@ -181,8 +197,8 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		$this->store_pending_verification();
 
 		// Act.
-		$response = rest_do_request( $this->verification_request( 'pending-challenge' ) );
-		$replay   = rest_do_request( $this->verification_request( 'pending-challenge' ) );
+		$response = $this->verify_as_guest( 'pending-challenge' );
+		$replay   = $this->verify_as_guest( 'pending-challenge' );
 
 		// Assert: first read succeeds, the proof is single-use.
 		$this->assertSame( 200, $response->get_status() );
@@ -202,8 +218,8 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		$this->store_pending_verification();
 
 		// Act.
-		$anonymous = rest_do_request( $this->verification_request( $challenge ) );
-		$relay     = rest_do_request( $this->verification_request( 'pending-challenge' ) );
+		$anonymous = $this->verify_as_guest( $challenge );
+		$relay     = $this->verify_as_guest( 'pending-challenge' );
 
 		// Assert.
 		$this->assertSame( 404, $anonymous->get_status() );
@@ -236,8 +252,8 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		$this->mock_http(
 			function ( $pre, $args ) use ( &$sent, &$stranger, &$relay ) {
 				$sent     = json_decode( $args['body'], true );
-				$stranger = rest_do_request( $this->verification_request( null ) );
-				$relay    = rest_do_request( $this->verification_request( (string) ( $sent['verify_challenge'] ?? '' ) ) );
+				$stranger = $this->verify_as_guest( null );
+				$relay    = $this->verify_as_guest( (string) ( $sent['verify_challenge'] ?? '' ) );
 
 				return $this->http_response(
 					201,
@@ -277,6 +293,7 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		$wp_rest_server = $server;
 		do_action( 'rest_api_init', $server );
 		$this->store_pending_verification();
+		wp_set_current_user( 0 );
 
 		// Act.
 		$response = $server->dispatch( $this->verification_request( 'pending-challenge' ) );
