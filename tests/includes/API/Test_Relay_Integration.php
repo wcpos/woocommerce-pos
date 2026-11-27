@@ -144,20 +144,121 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * It exposes the pending verification token once, consuming it on first read.
+	 * Build the relay's verification callback request.
+	 *
+	 * @param string|null $challenge Challenge to present, or null for none.
+	 *
+	 * @return WP_REST_Request
 	 */
-	public function test_relay_verification_returns_token_during_registration_window(): void {
+	private function verification_request( ?string $challenge ): WP_REST_Request {
+		$request = new WP_REST_Request( 'GET', '/wcpos/v1/print-jobs/relay-verification' );
+		if ( null !== $challenge ) {
+			$request->set_query_params( array( 'challenge' => $challenge ) );
+		}
+
+		return $request;
+	}
+
+	/**
+	 * Store a registration in flight.
+	 */
+	private function store_pending_verification(): void {
+		set_transient(
+			Cloud_Print_Relay_Service::VERIFY_TRANSIENT,
+			array(
+				'token'     => 'pending-token',
+				'challenge' => 'pending-challenge',
+			),
+			300
+		);
+	}
+
+	/**
+	 * It gives the token once to the caller that presents the challenge.
+	 */
+	public function test_relay_verification_returns_token_once_to_the_challenge_holder(): void {
 		// Arrange.
-		set_transient( Cloud_Print_Relay_Service::VERIFY_TRANSIENT, 'pending-token', 300 );
+		$this->store_pending_verification();
 
 		// Act.
-		$response = rest_do_request( new WP_REST_Request( 'GET', '/wcpos/v1/print-jobs/relay-verification' ) );
-		$replay   = rest_do_request( new WP_REST_Request( 'GET', '/wcpos/v1/print-jobs/relay-verification' ) );
+		$response = rest_do_request( $this->verification_request( 'pending-challenge' ) );
+		$replay   = rest_do_request( $this->verification_request( 'pending-challenge' ) );
 
 		// Assert: first read succeeds, the proof is single-use.
-		$this->assertEquals( 200, $response->get_status() );
-		$this->assertEquals( array( 'token' => 'pending-token' ), $response->get_data() );
-		$this->assertEquals( 404, $replay->get_status() );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( 'token' => 'pending-token' ), $response->get_data() );
+		$this->assertSame( 404, $replay->get_status() );
+	}
+
+	/**
+	 * A caller without the challenge gets the no-pending answer and uses nothing up.
+	 *
+	 * @dataProvider challenges_that_do_not_match
+	 *
+	 * @param string|null $challenge Challenge the caller presents.
+	 */
+	public function test_relay_verification_without_the_challenge_leaves_the_token_pending( ?string $challenge ): void {
+		// Arrange.
+		$this->store_pending_verification();
+
+		// Act.
+		$anonymous = rest_do_request( $this->verification_request( $challenge ) );
+		$relay     = rest_do_request( $this->verification_request( 'pending-challenge' ) );
+
+		// Assert.
+		$this->assertSame( 404, $anonymous->get_status() );
+		$this->assertSame( 'wcpos_relay_no_pending_verification', $anonymous->as_error()->get_error_code() );
+		$this->assertSame( 200, $relay->get_status() );
+		$this->assertSame( array( 'token' => 'pending-token' ), $relay->get_data() );
+	}
+
+	/**
+	 * Challenges that must not release the token.
+	 *
+	 * @return array
+	 */
+	public function challenges_that_do_not_match(): array {
+		return array(
+			'none'  => array( null ),
+			'empty' => array( '' ),
+			'wrong' => array( 'not-the-challenge' ),
+		);
+	}
+
+	/**
+	 * A poll during the registration request does not stop the relay verifying the site.
+	 */
+	public function test_register_survives_an_anonymous_poll_during_the_relay_request(): void {
+		// Arrange: while the register request is open, a stranger polls first, then the relay calls back.
+		$sent     = array();
+		$stranger = null;
+		$relay    = null;
+		$this->mock_http(
+			function ( $pre, $args ) use ( &$sent, &$stranger, &$relay ) {
+				$sent     = json_decode( $args['body'], true );
+				$stranger = rest_do_request( $this->verification_request( null ) );
+				$relay    = rest_do_request( $this->verification_request( (string) ( $sent['verify_challenge'] ?? '' ) ) );
+
+				return $this->http_response(
+					201,
+					array(
+						'site_key'    => 'abcdef0123456789abcdef0123456789',
+						'hint_secret' => '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
+					)
+				);
+			}
+		);
+
+		// Act.
+		$response = rest_do_request( $this->wp_rest_post_request( '/wcpos/v1/print-jobs/relay/register' ) );
+
+		// Assert.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertMatchesRegularExpression( '/^[a-f0-9]{48}$/', $sent['verify_challenge'] );
+		$this->assertNotSame( $sent['verify_token'], $sent['verify_challenge'] );
+		$this->assertSame( 404, $stranger->get_status() );
+		$this->assertSame( 200, $relay->get_status() );
+		$this->assertSame( array( 'token' => $sent['verify_token'] ), $relay->get_data() );
 	}
 
 	/**
@@ -175,10 +276,10 @@ class Test_Relay_Integration extends WCPOS_REST_Unit_Test_Case {
 		$server         = new \WP_REST_Server();
 		$wp_rest_server = $server;
 		do_action( 'rest_api_init', $server );
-		set_transient( Cloud_Print_Relay_Service::VERIFY_TRANSIENT, 'pending-token', 300 );
+		$this->store_pending_verification();
 
 		// Act.
-		$response = $server->dispatch( new WP_REST_Request( 'GET', '/wcpos/v1/print-jobs/relay-verification' ) );
+		$response = $server->dispatch( $this->verification_request( 'pending-challenge' ) );
 
 		// Assert.
 		$wp_rest_server = $previous;
