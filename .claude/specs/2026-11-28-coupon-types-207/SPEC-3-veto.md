@@ -124,11 +124,12 @@ High tier: money routes on the core plugin. Money table rows this change must sa
      `$result = null === $command ? $handler( null ) : Command_Log::run( $order, $command, $handler );`
      with a gate built only for veto kinds:
      ```php
-     $gate   = in_array( $kind, Payment_Veto::KINDS, true )
+     $gate   = in_array( $kind, Payment_Veto::KINDS, true ) && has_filter( 'wcpos_payment_pre_capture' )
      	? fn() => Payment_Veto::check( $order, $kind, $this->veto_context( $kind, $request, $order ) )
      	: null;
      $result = null === $command ? $handler( null ) : Command_Log::run( $order, $command, $handler, $gate );
      ```
+     The `has_filter()` term in the condition is required (answered 2026-11-28): with no callback, no gate is built, so `veto_context()` never runs and a capture makes no extra ledger read. Keep the same check inside `Payment_Veto::check()` as well.
      Keep the existing comment above that line, add `use WCPOS\WooCommercePOS\Payments\Contract\Payment_Veto;` (and `Money` if it is not imported), and change nothing else in the closure.
      A `record` with no command (no row id) stays ungated: its handler answers 400 before anything is written.
    - New `private function veto_context( string $kind, WP_REST_Request $request, WC_Order $order ): array`, with a docblock. It returns `array( 'amount' => int|null, 'method' => string|null, 'cashier_id' => get_current_user_id() )`:
