@@ -357,6 +357,39 @@ class Test_Payment_Pre_Capture extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'Credit changed.', $response->get_data()['message'] );
 	}
 
+	/** @dataProvider reserved_codes */
+	public function test_pre_capture_reserved_code_uses_default_code_and_keeps_message( string $code ): void {
+		$order = $this->create_pos_order();
+		$this->refuse( array( 'record' ), $code, 'Credit changed.' );
+
+		$response = $this->record( $order, $this->payment( 'pos_cash', '50.00' ) );
+
+		$this->assert_veto( $response, 'wcpos_payment_vetoed' );
+		$this->assertSame( 'Credit changed.', $response->get_data()['message'] );
+	}
+
+	/** Refusal codes reserved by the till or core. */
+	public static function reserved_codes(): array {
+		return array(
+			'resendable stale'      => array( 'wcpos_revision_stale' ),
+			'resendable locked'     => array( 'wcpos_payment_locked' ),
+			'resendable unprefixed' => array( 'woo_rxdb_sync_record_locked' ),
+			'core already paid'     => array( 'wcpos_order_already_paid' ),
+			'core conflict'         => array( 'wcpos_payment_conflict' ),
+		);
+	}
+
+	/** A refusal keeps the extension's own code and message. */
+	public function test_pre_capture_free_wcpos_code_passes_through(): void {
+		$order = $this->create_pos_order();
+		$this->refuse( array( 'record' ), 'wcpos_store_credit_insufficient', 'Credit changed.' );
+
+		$response = $this->record( $order, $this->payment( 'pos_cash', '50.00' ) );
+
+		$this->assert_veto( $response, 'wcpos_store_credit_insufficient' );
+		$this->assertSame( 'Credit changed.', $response->get_data()['message'] );
+	}
+
 	/** An empty callback message gets cashier-readable copy. */
 	public function test_pre_capture_empty_message_uses_default_message(): void {
 		$order = $this->create_pos_order();

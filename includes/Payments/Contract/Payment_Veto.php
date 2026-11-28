@@ -18,6 +18,41 @@ use WP_Error;
 final class Payment_Veto {
 	public const KINDS = array( 'record', 'intent', 'submit', 'capture', 'close' );
 
+	/** Codes a refusal may never carry: the till's re-send list and core's own payment answers. Such a code becomes wcpos_payment_vetoed. */
+	public const RESERVED_CODES = array(
+		// The till re-sends these: monorepo packages/sync-core/src/woo/moneyCommandAnswer.ts RESENDABLE_MONEY_CODES (main a84fd1bf, 28 Nov 2026). Keep in step with that list.
+		'wcpos_payment_locked',
+		'wcpos_revision_stale',
+		'woo_rxdb_sync_record_locked',
+		// Codes core itself answers on the payments routes (includes/Payments, Payments_Controller).
+		'wcpos_amount_exceeds_balance',
+		'wcpos_amount_mismatch',
+		'wcpos_balance_outstanding',
+		'wcpos_capture_mode_conflict',
+		'wcpos_capture_mode_not_allowed',
+		'wcpos_capture_mode_unsupported',
+		'wcpos_command_conflict',
+		'wcpos_fields_invalid',
+		'wcpos_idempotency_conflict',
+		'wcpos_idempotency_in_progress',
+		'wcpos_invalid_transition',
+		'wcpos_method_not_recordable',
+		'wcpos_order_already_paid',
+		'wcpos_order_not_found',
+		'wcpos_payment_conflict',
+		'wcpos_payment_in_flight',
+		'wcpos_payment_method_disabled',
+		'wcpos_payment_method_not_found',
+		'wcpos_payment_not_correctable',
+		'wcpos_payment_not_found',
+		'wcpos_provider_error',
+		'wcpos_refund_not_allocatable',
+		'wcpos_rest_cannot_edit_order',
+		'wcpos_revision_required',
+		'wcpos_settlement_not_saved',
+		'wcpos_tender_correction_unavailable',
+	);
+
 	/**
 	 * Ask the store whether to refuse this command before its handler runs.
 	 *
@@ -32,13 +67,14 @@ final class Payment_Veto {
 		try {
 			/**
 			 * Last word before money is taken or the sale closes. Return a WP_Error to refuse.
-			 * Runs under the order lock; do not take it again (Order_Lock is a lease, not reentrant).
+			 * Runs under the order lock, so the callback has no need to take it.
 			 * The callback may change and save the order (for example, recompute a coupon) only when it is about to refuse;
 			 * a callback that allows must never change the order.
 			 * A callback that receives a WP_Error returns it unchanged.
 			 *
 			 * Core answers a refusal with 409 in the shape of `wcpos_revision_stale` plus `vetoed: true`: the code is the
-			 * callback's when it starts with `wcpos_`, else `wcpos_payment_vetoed`; the message is the callback's, translated
+			 * callback's when it starts with `wcpos_` and is not one of RESERVED_CODES, else `wcpos_payment_vetoed`;
+			 * the message is the callback's, translated
 			 * and readable by a cashier; `data.detail` is passed through from the error's data. Nothing is stored. A throw
 			 * or any other return value allows the command, and a throw is logged.
 			 *
@@ -64,7 +100,8 @@ final class Payment_Veto {
 		if ( ! is_wp_error( $veto ) ) {
 			return null;
 		}
-		$code    = 0 === strpos( (string) $veto->get_error_code(), 'wcpos_' ) ? $veto->get_error_code() : 'wcpos_payment_vetoed';
+		$code    = $veto->get_error_code();
+		$code    = 0 === strpos( (string) $code, 'wcpos_' ) && ! in_array( $code, self::RESERVED_CODES, true ) ? $code : 'wcpos_payment_vetoed';
 		$message = $veto->get_error_message();
 		if ( '' === $message ) {
 			$message = __( 'The store refused this payment. Check the order and try again.', 'woocommerce-pos' );
