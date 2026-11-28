@@ -26,6 +26,7 @@ Combination table (each row names its test in the new test file):
 | Ack after a stock push | ack `document.stock_quantity` and `currentRevision` equal a fresh read | `test_ack_stock_and_revision_equal_a_fresh_read` |
 | Stock call fails after the forward | error 500 `woo_rxdb_sync_stock_write_failed`, other fields saved, stock unchanged; a re-push on the old base gets 409 whose `current.stock_quantity` is the live stock | `test_stock_write_failure_returns_error_and_no_ack` |
 | Decimal stock (the plugin's decimal quantity setting) | round-trips | existing `tests/includes/Sync/Test_Decimal_Quantity_Write_Contract.php` (must stay green, not edited) |
+| Fractional stock with decimals off | forwarded unchanged, wc/v3 400 as today | existing `Test_Decimal_Quantity_Write_Contract.php:247` (must stay green, not edited) |
 
 ## In scope (the only files you may edit)
 
@@ -70,7 +71,7 @@ New `includes/API/V2/Writers/Product_Writer.php`, `class Product_Writer extends 
 - `public function prepare_update( array $meta, int $id, array $payload, callable $validate_tax_ids )`: `return $this->defer_stock( $id, parent::prepare_update( $meta, $id, $payload, $validate_tax_ids ) );`
 - `protected function defer_stock( int $id, array $prepared ): array`. It returns `$prepared` unchanged unless every one of these holds:
   1. `array_key_exists( 'stock_quantity', $prepared['payload'] )`;
-  2. the pushed value is not `null` and not `''`, and `is_numeric()`;
+  2. the pushed value is not `null` and not `''`, is `is_numeric()`, and `(float) wc_stock_amount( $value ) === (float) $value`: WooCommerce would store it unchanged. With decimal quantities off, `wc_stock_amount` is `intval` and the `wc/v3` schema is integer, so a fraction such as `0.5` is left in the forwarded payload and WooCommerce still answers 400 `rest_invalid_param` as today (`tests/includes/Sync/Test_Decimal_Quantity_Write_Contract.php:247`). The plugin's decimal setting swaps in `floatval` (`includes/Products.php:98-101`) and relaxes the schema together (`includes/Services/Decimal_Quantities.php:69`), so with it on, fractions are deferred;
   3. `wc_get_product( $id )` is a `WC_Product`, `->managing_stock()` is truthy, and `true === ->get_manage_stock( 'edit' )` (the record manages its own stock now; parent-managed variations and unmanaged products keep today's absolute forward);
   4. the payload either has no `manage_stock` key, or its `manage_stock` is strictly `true`.
 
