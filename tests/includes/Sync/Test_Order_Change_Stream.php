@@ -553,6 +553,7 @@ class Test_Order_Change_Stream extends Sync_REST_Store_Test_Case {
 		$this->assertTrue( $data['complete'] );
 		$this->assertSame( 200, $again->get_status() );
 		$this->assertSame( array(), $again->get_data()['changes'] );
+		$this->assertSame( $data['checkpoint']['head'], $again->get_data()['checkpoint']['since'], 'An empty held page keeps the cursor.' );
 		$this->assertSame( array( $newest->get_id() ), array_column( $passed['changes'], 'id' ) );
 		$this->assertSame( $head, $passed['checkpoint']['since'] );
 		$this->assertSame( $head, $passed['checkpoint']['head'] );

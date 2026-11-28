@@ -160,6 +160,37 @@ class Test_Sync_Journal_Hold_Back extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * A row that commits inside a gap of two numbers, between the tail read and the rows read, waits for the next page.
+	 */
+	public function test_hold_back_row_landing_inside_wide_gap_waits(): void {
+		// Arrange.
+		global $wpdb;
+		$this->row( 1, 'order', self::YOUNG );
+		$this->row( 4, 'order', self::YOUNG );
+		$landed = false;
+		$land   = function ( $query ) use ( &$landed ) {
+			if ( ! $landed && 0 === strpos( (string) $query, 'SELECT sequence, object_id,' ) ) {
+				$landed = true;
+				$this->row( 3, 'order', self::YOUNG );
+			}
+			return $query;
+		};
+		add_filter( 'query', $land );
+
+		// Act.
+		try {
+			$page = $this->page( $this->floor );
+		} finally {
+			remove_filter( 'query', $land );
+		}
+
+		// Assert.
+		$this->assertSame( '1', $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . $this->journal->table_name() . ' WHERE sequence = %d', $this->floor + 3 ) ), 'Precondition: the row landed.' );
+		$this->assertSame( $this->seq( 1 ), array_column( $page['rows'], 'sequence' ) );
+		$this->assertSame( $this->floor + 1, $page['head'] );
+	}
+
+	/**
 	 * A number that commits before the tail read is served, never jumped.
 	 */
 	public function test_hold_back_row_landing_before_tail_read_is_served(): void {
