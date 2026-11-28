@@ -1197,7 +1197,18 @@ class Ledger {
 	private function confirm( Ledger_Draft $draft, string $id, array $patch ) {
 		$row   = $draft->row( $id );
 		$event = $patch['event_id'] ?? null;
-		if ( ! $row || 'failed' === $row['status'] ) {
+		if ( ! $row ) {
+			return null;
+		}
+		if ( 'failed' === $row['status'] ) {
+			// A failed row takes only a same-status annotation, its events and provider refs: never a status, reason or money.
+			if ( 'failed' === ( $patch['status'] ?? 'failed' ) && ( $patch['amount'] ?? $row['amount'] ) === $row['amount'] && ( $patch['currency'] ?? $row['currency'] ) === $row['currency'] ) {
+				$annotated = $this->apply_transition( $row, array_intersect_key( $patch, array_flip( array( 'events', 'provider_refs' ) ) ) );
+				if ( is_string( $event ) ) {
+					$annotated['seen_events'] = array_slice( array_merge( $annotated['seen_events'] ?? array(), array( $event ) ), -self::SEEN_EVENTS_MAX );
+				}
+				$draft->put( $annotated );
+			}
 			return null;
 		}
 		if ( is_string( $event ) && in_array( $event, $row['seen_events'] ?? array(), true ) ) {
