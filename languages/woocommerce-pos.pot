@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 2.0.5\n"
+"Project-Id-Version: WCPOS 2.0.6\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-27T11:52:03+00:00\n"
+"POT-Creation-Date: 2026-11-28T15:51:55+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -518,14 +518,14 @@ msgstr ""
 #. translators: REST API schema field label or error message.
 #: includes/API/V1/Checkout_Controller.php:284
 #: includes/API/V1/Receipts_Controller.php:283
-#: includes/API/V2/Payments_Controller.php:466
+#: includes/API/V2/Payments_Controller.php:502
 #: includes/Payments/Contract/Settlement.php:92
 msgid "Order not found."
 msgstr ""
 
 #: includes/API/V1/Checkout_Controller.php:294
 #: includes/API/V1/Orders_Controller.php:642
-#: includes/API/V2/Payments_Controller.php:470
+#: includes/API/V2/Payments_Controller.php:506
 msgid "Sorry, you are not allowed to edit this order."
 msgstr ""
 
@@ -1095,15 +1095,19 @@ msgstr ""
 msgid "Collection \"%1$s\" is not served by this route. Supported: %2$s."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:141
+#: includes/API/V2/Coupon_Types_Controller.php:59
+msgid "Sorry, you cannot view coupon types."
+msgstr ""
+
+#: includes/API/V2/Payments_Controller.php:177
 msgid "Sorry, you cannot manage order payments."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:161
+#: includes/API/V2/Payments_Controller.php:197
 msgid "Payment must be an object."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:232
+#: includes/API/V2/Payments_Controller.php:268
 #: includes/API/V2/Payment_Methods_Controller.php:110
 #: includes/Payments/Contract/Gateway_Handler.php:59
 #: includes/Payments/Contract/Gateway_Submission.php:131
@@ -1111,15 +1115,15 @@ msgstr ""
 msgid "Payment method not found."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:238
+#: includes/API/V2/Payments_Controller.php:274
 msgid "Values must be an object and attempt ID a UUID."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:243
+#: includes/API/V2/Payments_Controller.php:279
 msgid "Attempt ID must name the sent attempt to cancel."
 msgstr ""
 
-#: includes/API/V2/Payments_Controller.php:373
+#: includes/API/V2/Payments_Controller.php:409
 msgid "Invalid payment operation parameters."
 msgstr ""
 
@@ -1397,16 +1401,16 @@ msgstr ""
 msgid "Clearing the awaiting-customer state"
 msgstr ""
 
-#: includes/Payments/Contract/Command_Log.php:105
+#: includes/Payments/Contract/Command_Log.php:106
 msgid "This command ID was already used with a different request."
 msgstr ""
 
-#: includes/Payments/Contract/Command_Log.php:250
+#: includes/Payments/Contract/Command_Log.php:257
 #: includes/Payments/Contract/Gateway_Submission.php:109
 msgid "This attempt was cancelled or superseded at the till."
 msgstr ""
 
-#: includes/Payments/Contract/Command_Log.php:276
+#: includes/Payments/Contract/Command_Log.php:283
 msgid "The order changed since this command was built; read it again."
 msgstr ""
 
@@ -1732,6 +1736,10 @@ msgstr ""
 #: includes/Payments/Contract/Payments_Sweeper.php:199
 #, php-format
 msgid "WCPOS payment %1$s: the authorization for %2$s expired after the order was marked paid and was never captured — needs attention."
+msgstr ""
+
+#: includes/Payments/Contract/Payment_Veto.php:109
+msgid "The store refused this payment. Check the order and try again."
 msgstr ""
 
 #: includes/Payments/Contract/Settlement.php:196
