@@ -691,6 +691,7 @@ class Test_Payment_Pre_Capture extends WCPOS_REST_Unit_Test_Case {
 		return array(
 			'true'   => array( array( 'recorded_offline' => true ), true ),
 			'false'  => array( array( 'recorded_offline' => false ), false ),
+			'one'    => array( array( 'recorded_offline' => 1 ), true ),
 			'absent' => array( array(), false ),
 		);
 	}
