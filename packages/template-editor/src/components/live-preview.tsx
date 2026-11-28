@@ -12,6 +12,7 @@ interface LivePreviewProps {
 	sampleData: Record<string, unknown>;
 	loading?: boolean;
 	sourcePicker?: ReactNode;
+	label?: string;
 }
 
 export function buildLivePreviewSrcDoc(renderedHtml: string): string {
@@ -32,7 +33,13 @@ export function getPreviewBodyClassName(): string {
 	return 'wcpos:flex wcpos:flex-1 wcpos:min-h-0 wcpos:flex-col wcpos:p-0 wcpos:bg-gray-50';
 }
 
-export function LivePreview({ content, sampleData, loading, sourcePicker }: LivePreviewProps) {
+export function LivePreview({
+	content,
+	sampleData,
+	loading,
+	sourcePicker,
+	label = t('editor.preview'),
+}: LivePreviewProps) {
 	const renderedHtml = useMustachePreview(content, sampleData);
 	const srcdoc = buildLivePreviewSrcDoc(renderedHtml);
 
@@ -40,7 +47,7 @@ export function LivePreview({ content, sampleData, loading, sourcePicker }: Live
 		<div className="wcpos:border wcpos:border-gray-200 wcpos:bg-white wcpos:flex wcpos:flex-col wcpos:rounded-lg wcpos:overflow-hidden">
 			<div className="wcpos:flex wcpos:items-center wcpos:justify-between wcpos:px-3 wcpos:py-2 wcpos:border-b wcpos:border-gray-200 wcpos:bg-gray-50">
 				<span className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase">
-					{t('editor.preview')}
+					{label}
 				</span>
 				<div className="wcpos:flex wcpos:items-center wcpos:gap-3">{sourcePicker}</div>
 			</div>

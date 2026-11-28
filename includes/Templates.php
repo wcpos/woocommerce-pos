@@ -35,6 +35,9 @@ class Templates {
 	/**
 	 * Supported template types.
 	 */
+	public const TYPE_CUSTOMER_EMAIL = 'email';
+
+	/** Types selected by a cashier, display or report picker. */
 	const SUPPORTED_TYPES = array( 'receipt', 'report', 'display', 'closure' );
 
 	/**
@@ -63,7 +66,7 @@ class Templates {
 	 * on dev-next, see .claude/research/2026-09-03-online-store-footprint.md).
 	 * Behind the latch the whole registration costs no queries.
 	 */
-	public const DEFAULT_TERMS_VERSION = 7;
+	public const DEFAULT_TERMS_VERSION = 8;
 
 	/** Autoloaded latch: read on every request, so it must ride in alloptions. */
 	public const DEFAULT_TERMS_OPTION = 'woocommerce_pos_template_default_terms_version';
@@ -191,7 +194,7 @@ class Templates {
 	private function default_terms_present(): bool {
 		// Every supported type is seeded, so every one is verified — a list kept
 		// here by hand let `display` seed without being checked (next, 2026-09).
-		foreach ( self::SUPPORTED_TYPES as $slug ) {
+		foreach ( array_merge( self::SUPPORTED_TYPES, array( self::TYPE_CUSTOMER_EMAIL ) ) as $slug ) {
 			if ( ! term_exists( $slug, 'wcpos_template_type' ) ) {
 				return false;
 			}
@@ -460,6 +463,24 @@ class Templates {
 	}
 
 	/**
+	 * Resolve the template's type. An imported email design with conflicting types
+	 * cannot be opened as a printable document or selected for delivery.
+	 *
+	 * @param int $id Template post ID.
+	 */
+	public static function get_template_type( int $id ): ?string {
+		$terms = wp_get_post_terms( $id, 'wcpos_template_type' );
+		if ( ! $terms || is_wp_error( $terms ) ) {
+			return 'receipt';
+		}
+		$slugs = wp_list_pluck( $terms, 'slug' );
+		if ( count( $slugs ) > 1 && in_array( self::TYPE_CUSTOMER_EMAIL, $slugs, true ) ) {
+			return null;
+		}
+		return reset( $slugs );
+	}
+
+	/**
 	 * Get a database template by ID.
 	 *
 	 * @param int $template_id Template post ID.
@@ -474,8 +495,10 @@ class Templates {
 			return null;
 		}
 
-		$terms = wp_get_post_terms( $template_id, 'wcpos_template_type' );
-		$type  = ! empty( $terms ) && ! is_wp_error( $terms ) ? $terms[0]->slug : 'receipt';
+		$type = self::get_template_type( $template_id );
+		if ( null === $type ) {
+			return null;
+		}
 
 		$description     = get_post_meta( $template_id, '_template_description', true );
 		$language        = get_post_meta( $template_id, '_template_language', true );
@@ -625,7 +648,9 @@ class Templates {
 	 */
 	public static function find_template( $reference, string $type = 'receipt' ): ?array {
 		if ( is_numeric( $reference ) ) {
-			return self::get_template( (int) $reference );
+			$template = self::get_template( (int) $reference );
+			// Email designs belong to the wp-admin editor, never to a print or till lookup.
+			return $template && self::TYPE_CUSTOMER_EMAIL === $template['type'] ? null : $template;
 		}
 
 		return self::get_virtual_template( (string) $reference, $type );
@@ -1383,6 +1408,10 @@ class Templates {
 	 * @return void
 	 */
 	private function register_default_template_types(): void {
+		if ( ! term_exists( self::TYPE_CUSTOMER_EMAIL, 'wcpos_template_type' ) ) {
+			wp_insert_term( 'Email', 'wcpos_template_type', array( 'slug' => self::TYPE_CUSTOMER_EMAIL ) );
+		}
+
 		// Check if terms already exist to avoid duplicates.
 		if ( ! term_exists( 'receipt', 'wcpos_template_type' ) ) {
 			wp_insert_term(
@@ -1486,6 +1515,11 @@ class Templates {
 			<div id="<?php echo esc_attr( $taxonomy ); ?>-all" class="tabs-panel">
 				<ul id="<?php echo esc_attr( $taxonomy ); ?>checklist" class="categorychecklist form-no-clear">
 					<?php foreach ( $terms as $term ) : ?>
+						<?php
+						if ( self::TYPE_CUSTOMER_EMAIL === $term->slug ) {
+							continue;
+						}
+						?>
 						<li>
 							<label class="selectit">
 								<input 

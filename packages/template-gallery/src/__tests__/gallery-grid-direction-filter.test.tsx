@@ -1,6 +1,5 @@
 import { act } from 'react';
 
-import { useSearch } from '@tanstack/react-router';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -48,12 +47,10 @@ const { direction: _direction, ...legacyTemplate } = {
 	description: 'Payload without direction',
 };
 
-vi.mock('@tanstack/react-router', () => ({ useSearch: vi.fn(() => ({ type: 'receipt' })) }));
-
 vi.mock('../hooks/use-gallery-templates', () => ({
-	useGalleryTemplates: () => ({
+	useGalleryTemplates: (type: string) => ({
 		data:
-			useSearch({ from: '/' }).type === 'display'
+			type === 'display'
 				? [
 						{
 							...ltrTemplate,
@@ -91,8 +88,8 @@ vi.mock('../hooks/use-gallery-templates', () => ({
 }));
 
 vi.mock('../hooks/use-templates', () => ({
-	useTemplates: () => ({
-		data: useSearch({ from: '/' }).type === 'display' ? [installedDisplay] : [],
+	useTemplates: (type: string) => ({
+		data: type === 'display' ? [installedDisplay] : [],
 	}),
 	useSetActiveTemplate: () => ({ isPending: false, mutate: vi.fn(), variables: null }),
 	useToggleTemplate: () => ({ isPending: false, mutate: vi.fn(), variables: null }),
@@ -117,7 +114,6 @@ beforeEach(() => {
 			disconnect() {}
 		}
 	);
-	vi.mocked(useSearch).mockReturnValue({ type: 'receipt' });
 	(
 		window as Window & {
 			wcpos?: { templateGallery?: { adminUrl?: string; previewBaseUrl?: string } };
@@ -141,13 +137,13 @@ afterEach(() => {
 	delete (window as Window & { wcpos?: unknown }).wcpos;
 });
 
-function mountGrid(): HTMLElement {
+function mountGrid(type: 'receipt' | 'display' = 'receipt'): HTMLElement {
 	const container = document.createElement('div');
 	document.body.appendChild(container);
 	const root = createRoot(container);
 	mountedRoots.push(root);
 	act(() => {
-		root.render(<GalleryGrid />);
+		root.render(<GalleryGrid type={type} />);
 	});
 	return container;
 }
@@ -193,8 +189,7 @@ describe('GalleryGrid direction filter', () => {
 
 describe('GalleryGrid display templates', () => {
 	it('filters screen fit independently of category and supports clearing', () => {
-		vi.mocked(useSearch).mockReturnValue({ type: 'display' });
-		const container = mountGrid();
+		const container = mountGrid('display');
 		const radios = Array.from(
 			container.querySelectorAll<HTMLInputElement>('input[name="filter-screen"]')
 		);
@@ -231,24 +226,21 @@ describe('GalleryGrid display templates', () => {
 		act(() => clear!.click());
 		expect(titles()).toHaveLength(4);
 		act(() => radios[2].click());
-		vi.mocked(useSearch).mockReturnValue({ type: 'receipt' });
-		act(() => mountedRoots[0].render(<GalleryGrid />));
+		act(() => mountedRoots[0].render(<GalleryGrid type="receipt" />));
 		expect(container.querySelector('input[name="filter-screen"]')).toBeNull();
 		expect(titles()).toEqual(['Standard Receipt', 'Standard Receipt (RTL)', 'Legacy Receipt']);
 	});
 
 	it('shows the screen tag before the category tag on a display card', () => {
-		vi.mocked(useSearch).mockReturnValue({ type: 'display' });
-		const container = mountGrid();
+		const container = mountGrid('display');
 		const card = container.querySelector('h3')?.parentElement?.parentElement;
 		expect(card?.textContent).toContain('filter.screen_small');
 		expect(card?.textContent).toMatch(/filter.screen_small.*category.general/);
 	});
 
 	it('shows the Pro requirement, display creation link and previews without output filters', () => {
-		vi.mocked(useSearch).mockReturnValue({ type: 'display' });
 		Object.assign((window as any).wcpos.templateGallery, { isProActive: false });
-		const container = mountGrid();
+		const container = mountGrid('display');
 
 		expect(container.textContent).toContain('gallery.display_needs_pro');
 		expect(container.querySelector('a.page-title-action')?.getAttribute('href')).toBe(
@@ -266,12 +258,11 @@ describe('GalleryGrid display templates', () => {
 	});
 
 	it.each(['thumbnail', 'card', 'table'])('opens display modal from the %s', (source) => {
-		vi.mocked(useSearch).mockReturnValue({ type: 'display' });
 		Object.assign((window as any).wcpos.templateGallery, {
 			isProActive: true,
 			displayPreviewUrl: 'https://example.test/wcpos-display/',
 		});
-		const container = mountGrid();
+		const container = mountGrid('display');
 		const selector = source === 'table' ? 'tbody button' : 'section:nth-child(2) button';
 		const previews = Array.from(container.querySelectorAll<HTMLButtonElement>(selector)).filter(
 			(button) =>
@@ -291,8 +282,7 @@ describe('GalleryGrid display templates', () => {
 	it('does not apply a receipt direction filter after switching to display', () => {
 		const container = mountGrid();
 		clickDirection(container, 'rtl');
-		vi.mocked(useSearch).mockReturnValue({ type: 'display' });
-		act(() => mountedRoots[0].render(<GalleryGrid />));
+		act(() => mountedRoots[0].render(<GalleryGrid type="display" />));
 		expect(container.textContent).toContain('Legacy Receipt');
 	});
 });

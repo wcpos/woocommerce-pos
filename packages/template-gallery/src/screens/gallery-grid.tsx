@@ -1,7 +1,5 @@
 import * as React from 'react';
 
-import { useSearch } from '@tanstack/react-router';
-
 import { TemplatesTable, isTemplateEnabled } from '../components/active-templates-table';
 import { FilterSidebar, DEFAULT_FILTERS } from '../components/filter-sidebar';
 import { PreviewModal } from '../components/preview-modal';
@@ -60,13 +58,12 @@ function matchesFilters(
 	return true;
 }
 
-export function GalleryGrid() {
+export function GalleryGrid({ type }: { type: 'receipt' | 'display' | 'closure' | 'report' }) {
 	// Filters are kept per tab: a receipt-only category or search must not hide every display card.
 	const [filtersByType, setFiltersByType] = React.useState<Record<string, FilterState>>({});
 	const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
 	const [previewId, setPreviewId] = React.useState<number | string | null>(null);
 
-	const { type } = useSearch({ from: '/' });
 	const filters = filtersByType[type] ?? DEFAULT_FILTERS;
 	const setFilters = (next: FilterState) => setFiltersByType((prev) => ({ ...prev, [type]: next }));
 

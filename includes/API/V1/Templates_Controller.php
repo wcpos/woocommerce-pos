@@ -8,6 +8,8 @@
 namespace WCPOS\WooCommercePOS\API\V1;
 
 use Ramsey\Uuid\Uuid;
+use WCPOS\WooCommercePOS\API\Controller_Registry;
+use WCPOS\WooCommercePOS\Services\Customer_Email_Design;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
@@ -79,6 +81,33 @@ class Templates_Controller extends WP_REST_Controller {
 				'args'                => $this->get_collection_params(),
 			)
 		);
+
+		// The registry promotes this shared controller to v2. New settings are v2-only.
+		if ( Controller_Registry::V2_NAMESPACE === $this->namespace ) {
+			register_rest_route(
+				$this->namespace,
+				'/' . $this->rest_base . '/customer-email-design',
+				array(
+					array(
+						'methods'             => WP_REST_Server::READABLE,
+						'callback'            => array( $this, 'get_customer_email_design' ),
+						'permission_callback' => array( $this, 'update_item_permissions_check' ),
+					),
+					array(
+						'methods'             => WP_REST_Server::CREATABLE,
+						'callback'            => array( $this, 'set_customer_email_design' ),
+						'permission_callback' => array( $this, 'update_item_permissions_check' ),
+						'args'                => array(
+							'template_id' => array(
+								'type'     => 'integer',
+								'minimum'  => 0,
+								'required' => true,
+							),
+						),
+					),
+				)
+			);
+		}
 
 		// 2. GET /templates/active (fixed path).
 		register_rest_route(
@@ -984,8 +1013,8 @@ class Templates_Controller extends WP_REST_Controller {
 		$id   = $request['id'];
 		$type = $request->get_param( 'type' ) ?? 'receipt';
 
-		// Validate the template exists (database, virtual, or gallery).
-		$template = TemplatesManager::find_template_or_gallery( $id, $type );
+		// The admin preview can also render a saved email design, outside the till's print lookup.
+		$template = is_numeric( $id ) ? TemplatesManager::get_template( (int) $id ) : TemplatesManager::find_template_or_gallery( $id, $type );
 
 		if ( ! $template ) {
 			return new WP_Error(
@@ -1647,6 +1676,62 @@ class Templates_Controller extends WP_REST_Controller {
 		}
 
 		return true;
+	}
+
+	/** Current binding and editable designs for the wp-admin Email tab. */
+	public function get_customer_email_design(): WP_REST_Response {
+		$posts = get_posts(
+			array(
+				'post_type'      => 'wcpos_template',
+				'post_status'    => array( 'publish', 'draft' ),
+				'has_password'   => false,
+				'posts_per_page' => -1,
+				'orderby'        => 'title',
+				'order'          => 'ASC',
+				'tax_query'      => array(
+					array(
+						'taxonomy' => 'wcpos_template_type',
+						'field'    => 'slug',
+						'terms'    => TemplatesManager::TYPE_CUSTOMER_EMAIL,
+					),
+				),
+			)
+		);
+
+		$designs = array();
+		foreach ( $posts as $post ) {
+			if ( current_user_can( 'edit_post', $post->ID ) && 'logicless' === get_post_meta( $post->ID, '_template_engine', true )
+				&& TemplatesManager::TYPE_CUSTOMER_EMAIL === TemplatesManager::get_template_type( $post->ID ) ) {
+				$designs[] = array(
+					'id'     => $post->ID,
+					'title'  => $post->post_title,
+					'status' => $post->post_status,
+				);
+			}
+		}
+
+		$active = Customer_Email_Design::active();
+		return rest_ensure_response(
+			array(
+				'template_id'        => $active ? $active->ID : 0,
+				'unavailable_design' => ! $active && 0 !== Customer_Email_Design::assigned_id(),
+				'designs'            => $designs,
+			)
+		);
+	}
+
+	/**
+	 * Bind a completed-sale design, or clear the binding with ID zero.
+	 *
+	 * @param WP_REST_Request $request Admin request.
+	 */
+	public function set_customer_email_design( $request ) {
+		$id = (int) $request['template_id'];
+		if ( $id && ! current_user_can( 'edit_post', $id ) ) {
+			return new WP_Error( 'wcpos_forbidden_template', __( 'You cannot edit this template.', 'woocommerce-pos' ), array( 'status' => 403 ) );
+		}
+		$result = Customer_Email_Design::select( $id );
+		return is_wp_error( $result ) ? $result : $this->get_customer_email_design();
 	}
 
 	/**

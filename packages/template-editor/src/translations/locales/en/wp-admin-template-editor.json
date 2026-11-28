@@ -1,4 +1,6 @@
 {
+	"editor.info_email": "Customer email design. Preview order details with a sample POS order. The WooCommerce layout and email app affect the final appearance.",
+	"editor.email_content_preview": "Content preview",
 	"editor.info_display": "Customer display template. One section per display state; the display shows the section for its current state.",
 	"editor.state_idle": "Idle",
 	"editor.state_cart_empty": "Empty cart",

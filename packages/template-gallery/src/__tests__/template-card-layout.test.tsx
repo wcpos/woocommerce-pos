@@ -11,8 +11,6 @@ import { GalleryGrid } from '../screens/gallery-grid';
 
 import type { GalleryTemplate } from '../types';
 
-vi.mock('@tanstack/react-router', () => ({ useSearch: () => ({ type: 'receipt' }) }));
-
 vi.mock('../components/filter-sidebar', () => ({
 	DEFAULT_FILTERS: { search: '', categories: [], output: 'all', direction: 'all', screen: 'all' },
 	FilterSidebar: () => <div data-testid="filter-sidebar" />,
@@ -127,7 +125,7 @@ describe('TemplateCard gallery layout', () => {
 	});
 
 	it('uses the shared wrapper and grid classes in the live gallery', () => {
-		const markup = renderToStaticMarkup(<GalleryGrid />);
+		const markup = renderToStaticMarkup(<GalleryGrid type="receipt" />);
 
 		expect(markup).toContain(GALLERY_GRID_WRAPPER_CLASS);
 		expect(markup).toContain(GALLERY_GRID_CLASS);

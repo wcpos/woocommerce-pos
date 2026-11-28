@@ -70,22 +70,32 @@ function mount(element: React.ReactNode) {
 }
 
 describe('display tabs and table', () => {
-	it('enables and highlights Display, navigates by search, and leaves Report/Email disabled', () => {
+	it('highlights Display and navigates between template tabs', () => {
 		const container = mount(<TypeTabs activeType="display" />);
 		const buttons = Array.from(container.querySelectorAll('button'));
 		const display = buttons.find((button) => button.textContent === 'tabs.display');
 		const closure = buttons.find((button) => button.textContent === 'tabs.closures');
 		expect(closure?.disabled).toBe(false);
 		act(() => closure!.click());
-		expect(navigate).toHaveBeenCalledWith({ to: '/', search: { type: 'closure' } });
+		expect(navigate).toHaveBeenCalledWith({
+			to: '/',
+			search: { type: 'closure' },
+		});
 		expect(display).toBeDefined();
 		expect(display?.disabled).toBe(false);
 		expect(display?.className).toContain('wcpos:border-wp-admin-theme-color');
 		act(() => display!.click());
-		expect(navigate).toHaveBeenCalledWith({ to: '/', search: { type: 'display' } });
-		expect(buttons.filter((button) => button.disabled).map((button) => button.textContent)).toEqual(
-			['tabs.emailtabs.soon']
-		);
+		expect(navigate).toHaveBeenCalledWith({
+			to: '/',
+			search: { type: 'display' },
+		});
+		const email = buttons.find((button) => button.textContent === 'tabs.email');
+		expect(email?.disabled).toBe(false);
+		act(() => email!.click());
+		expect(navigate).toHaveBeenCalledWith({
+			to: '/',
+			search: { type: 'email' },
+		});
 	});
 
 	it('renders Live/Enabled columns, selected and disabled radios, and calls set-active', () => {

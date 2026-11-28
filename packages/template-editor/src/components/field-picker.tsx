@@ -12,6 +12,7 @@ interface FieldPickerProps {
 	schema: FieldSchema;
 	engine: string;
 	onInsertField: (text: string) => void;
+	stackOnPhone?: boolean;
 }
 
 const PANEL_ID = 'wcpos-template-editor-fields-panel';
@@ -85,7 +86,7 @@ function entryMatchesSearch(entry: FieldTreeEntry, search: string): boolean {
 	return entry.children.some((child) => entryMatchesSearch(child, search));
 }
 
-export function FieldPicker({ schema, engine, onInsertField }: FieldPickerProps) {
+export function FieldPicker({ schema, engine, onInsertField, stackOnPhone }: FieldPickerProps) {
 	const [search, setSearch] = useState('');
 	const { width, isResizing, panelRef, separatorProps } = useResizableWidth({
 		storageKey: 'wcpos-template-editor-fields-width',
@@ -103,7 +104,7 @@ export function FieldPicker({ schema, engine, onInsertField }: FieldPickerProps)
 		<div
 			ref={panelRef}
 			style={{ width: `${width}px` }}
-			className="wcpos:relative wcpos:shrink-0 wcpos:self-stretch"
+			className={`wcpos:relative wcpos:shrink-0 wcpos:self-stretch ${stackOnPhone ? 'wcpos:max-sm:w-full! wcpos:max-sm:h-44' : ''}`}
 		>
 			<div
 				id={PANEL_ID}
@@ -155,7 +156,7 @@ export function FieldPicker({ schema, engine, onInsertField }: FieldPickerProps)
 				{...separatorProps}
 				aria-label={t('editor.resize_fields')}
 				aria-controls={PANEL_ID}
-				className="wcpos:group wcpos:absolute wcpos:inset-y-0 wcpos:-end-2 wcpos:w-3 wcpos:cursor-col-resize wcpos:touch-none wcpos:focus-visible:outline-none"
+				className={`wcpos:group wcpos:absolute wcpos:inset-y-0 wcpos:-end-2 wcpos:w-3 wcpos:cursor-col-resize wcpos:touch-none wcpos:focus-visible:outline-none ${stackOnPhone ? 'wcpos:max-sm:hidden' : ''}`}
 			>
 				<div
 					className={`wcpos:absolute wcpos:inset-y-0 wcpos:start-1 wcpos:w-[3px] wcpos:rounded-full ${

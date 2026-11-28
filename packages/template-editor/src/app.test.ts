@@ -1,7 +1,7 @@
 import { act, createElement } from 'react';
 
 import { createRoot } from 'react-dom/client';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
 	App,
@@ -260,4 +260,33 @@ describe('order preview toggle', () => {
 			}
 		}
 	);
+});
+
+describe('email design editor', () => {
+	it('starts with the email design and previews sample order data', async () => {
+		const email: EditorConfig = {
+			...config,
+			type: 'email',
+			emailStarter: '<p>Completed order {{order.number}}</p>',
+			sampleData: { order: { number: 'POS-123' } },
+			hasPosOrders: true,
+		};
+		const container = document.createElement('div');
+		const root = createRoot(container);
+		try {
+			await act(async () => root.render(createElement(App, { config: email })));
+			expect(container.textContent).toContain('Customer email design.');
+			expect(container.textContent).toContain('Content preview');
+			expect(container.textContent).not.toContain('Sample Data');
+			await vi.waitFor(() => {
+				expect(container.querySelector('iframe')?.getAttribute('srcdoc')).toContain(
+					'<p>Completed order POS-123</p>'
+				);
+			});
+			expect(getDefaultDoc({ ...email, postContent: 'Saved design' })).toBe('Saved design');
+			expect(getDefaultDoc({ ...email, emailStarter: null })).toBe('');
+		} finally {
+			await act(async () => root.unmount());
+		}
+	});
 });
