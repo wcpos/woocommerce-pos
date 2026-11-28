@@ -146,7 +146,7 @@ High tier: money routes on the core plugin. Money table rows this change must sa
      - records each call (`$this->calls[] = array( 'kind' => $kind, 'context' => $context, 'order_id' => $order->get_id() )`);
      - returns `$veto` unchanged when it is already a `WP_Error`;
      - returns the `WP_Error` for a kind in `$kinds`, and `null` otherwise.
-   - "Nothing stored" helper: snapshot `stored_meta( $order_id, Ledger::META_KEY )`, `wc_get_order( $id )->get_status()`, `wc_get_order( $id )->is_paid()` and `did_action( 'woocommerce_payment_complete' )` before the command; assert all four unchanged after it. Ledger rows and the command-log entries both live in that meta, so an unchanged meta proves no row and no entry.
+   - "Nothing stored" helper: snapshot `stored_meta( $order_id, Ledger::META_KEY )`, `stored_meta( $order_id, Command_Log::META_KEY )`, `wc_get_order( $id )->get_status()`, `wc_get_order( $id )->is_paid()` and `did_action( 'woocommerce_payment_complete' )` before the command; assert all five unchanged after it. Row-level command entries live with the ledger rows in `Ledger::META_KEY`, and order-level ones (`submit`, `close`) live in `Command_Log::META_KEY` (answered 2026-11-28), so both metas unchanged proves no row and no entry.
    - Tests, named `test_pre_capture_[scenario]_[expected_result]`, Arrange/Act/Assert, `assertSame( expected, actual )`:
      1. **record vetoed**:
         - 409, code `wcpos_test_refused`, message `Refused for the test.`;
