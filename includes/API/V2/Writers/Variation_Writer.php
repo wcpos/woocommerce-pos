@@ -43,12 +43,13 @@ class Variation_Writer extends Product_Writer {
 		if ( array_key_exists( 'parent_id', $payload ) && ( ! is_int( $payload['parent_id'] ) || $parent_id !== $payload['parent_id'] ) ) {
 			return $this->parent_mismatch();
 		}
-		return $this->defer_stock( $id, array(
+		$prepared = array(
 			'method' => 'PUT',
 			'route' => $meta['route'] . '/' . $parent_id . '/variations/' . $id,
 			'payload' => $payload,
 			'context' => array( 'parent_id' => $parent_id ),
-		) );
+		);
+		return $this->defer_stock( $id, $prepared );
 	}
 
 	/** Confirm a born-twice variation still belongs to the requested parent. */

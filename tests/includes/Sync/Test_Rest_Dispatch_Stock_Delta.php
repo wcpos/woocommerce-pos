@@ -64,12 +64,23 @@ class Test_Rest_Dispatch_Stock_Delta extends Sync_REST_Store_Test_Case {
 		parent::tearDown();
 	}
 
+	/**
+	 * Count stock update queries without modifying them.
+	 *
+	 * @param string $sql Stock update query.
+	 * @return string
+	 */
 	public function count_stock_query( $sql ) {
 		++$this->stock_queries;
 		return $sql;
 	}
 
-	/** Apply the concurrent checkout's atomic decrement before WooCommerce saves. */
+	/**
+	 * Apply the concurrent checkout's atomic decrement before WooCommerce saves.
+	 *
+	 * @param \WC_Product $product Product being saved.
+	 * @return \WC_Product
+	 */
 	public function sale_in_window( $product ) {
 		if ( $this->sale_qty > 0 && 0 === $this->sales_fired ) {
 			++$this->sales_fired;
@@ -78,7 +89,15 @@ class Test_Rest_Dispatch_Stock_Delta extends Sync_REST_Store_Test_Case {
 		return $product;
 	}
 
-	/** Dispatch an update with a distinct mutation ID. */
+	/**
+	 * Dispatch an update with a distinct mutation ID.
+	 *
+	 * @param string      $collection Collection name.
+	 * @param int         $id         Product or variation ID.
+	 * @param string|null $base       Client's base revision.
+	 * @param array       $payload    Fields to update.
+	 * @return \WP_REST_Response
+	 */
 	private function push( string $collection, int $id, ?string $base, array $payload ) {
 		++$this->seq;
 		$mid                  = sprintf( '30000000-0000-4000-8000-%012d', $this->seq );
@@ -100,14 +119,25 @@ class Test_Rest_Dispatch_Stock_Delta extends Sync_REST_Store_Test_Case {
 		return $this->server->dispatch( $request );
 	}
 
-	/** The revision a client holding the current row would send (read off a 409). */
+	/**
+	 * The revision a client holding the current row would send (read off a 409).
+	 *
+	 * @param string $collection Collection name.
+	 * @param int    $id         Product or variation ID.
+	 * @return string
+	 */
 	private function held_revision( string $collection, int $id ): string {
 		$r = $this->push( $collection, $id, null, array( 'regular_price' => '1.00' ) );
 		$this->assertSame( 409, $r->get_status() );
 		return $r->get_data()['currentRevision'];
 	}
 
-	/** Read the saved stock without relying on the fixture's product object. */
+	/**
+	 * Read the saved stock without relying on the fixture's product object.
+	 *
+	 * @param int $id Product or variation ID.
+	 * @return int|null
+	 */
 	private function stock( int $id ) {
 		wp_cache_flush();
 		return wc_get_product( $id )->get_stock_quantity();
