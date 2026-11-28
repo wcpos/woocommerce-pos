@@ -289,7 +289,26 @@ class Test_Payment_Pre_Capture extends WCPOS_REST_Unit_Test_Case {
 		$replay = $this->command( $route, $body );
 
 		$this->assertSame( 200, $replay->get_status() );
-		$this->assertSame( $first->get_data()['payment']['id'], $replay->get_data()['payment']['id'] );
+		// The wire form the till reads: the answer holds stdClass values, which assertSame compares by instance.
+		$this->assertSame( wp_json_encode( $first->get_data() ), wp_json_encode( $replay->get_data() ) );
+		$this->assertSame( array(), $this->calls );
+	}
+
+	/** A replayed close answers from the command log and never asks for a veto. */
+	public function test_pre_capture_close_replay_skips_veto(): void {
+		$order = $this->create_pos_order();
+		Ledger_Seed::rows( $order, array( $this->captured_row( '92.95' ) ), false );
+		$route = '/wcpos/v2/orders/' . $order->get_id() . '/close';
+		$body  = $this->envelope( $order );
+		$first = $this->command( $route, $body );
+		$this->assertSame( 200, $first->get_status() );
+		$this->refuse( array( 'close' ) );
+
+		$replay = $this->command( $route, $body );
+
+		$this->assertSame( 200, $replay->get_status() );
+		// The wire form the till reads: the answer holds stdClass values, which assertSame compares by instance.
+		$this->assertSame( wp_json_encode( $first->get_data() ), wp_json_encode( $replay->get_data() ) );
 		$this->assertSame( array(), $this->calls );
 	}
 
@@ -376,12 +395,13 @@ class Test_Payment_Pre_Capture extends WCPOS_REST_Unit_Test_Case {
 	/** Refusal codes reserved by the till or core. */
 	public static function reserved_codes(): array {
 		return array(
-			'resendable stale'      => array( 'wcpos_revision_stale' ),
-			'resendable locked'     => array( 'wcpos_payment_locked' ),
-			'resendable unprefixed' => array( 'woo_rxdb_sync_record_locked' ),
-			'core already paid'     => array( 'wcpos_order_already_paid' ),
-			'core conflict'         => array( 'wcpos_payment_conflict' ),
-			'core service stock'    => array( 'wcpos_insufficient_stock' ),
+			'resendable stale'        => array( 'wcpos_revision_stale' ),
+			'resendable locked'       => array( 'wcpos_payment_locked' ),
+			'resendable unprefixed'   => array( 'woo_rxdb_sync_record_locked' ),
+			'core already paid'       => array( 'wcpos_order_already_paid' ),
+			'core conflict'           => array( 'wcpos_payment_conflict' ),
+			'core service stock'      => array( 'wcpos_insufficient_stock' ),
+			'core service unreadable' => array( 'wcpos_order_unreadable' ),
 		);
 	}
 
