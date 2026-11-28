@@ -82,7 +82,7 @@ class Product_Writer extends Null_Writer {
 			$result = false;
 		}
 		if ( false === $result ) {
-			return new WP_Error( 'woo_rxdb_sync_stock_write_failed', 'The record was saved but its stock was not written. Re-read the record before retrying.', array( 'status' => 500 ) );
+			return new WP_Error( 'woo_rxdb_sync_stock_write_failed', 'The record was saved but its stock may not have been written. Re-read the record before retrying.', array( 'status' => 500 ) );
 		}
 		return null;
 	}

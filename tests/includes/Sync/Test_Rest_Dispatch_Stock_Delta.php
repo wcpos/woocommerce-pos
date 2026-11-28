@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
-use WCPOS\WooCommercePOS\Sync\Api;
 
 require_once __DIR__ . '/Test_Rest_Dispatch_Write_Contract.php';
 
@@ -111,7 +110,8 @@ class Test_Rest_Dispatch_Stock_Delta extends Sync_REST_Store_Test_Case {
 			'baseRevision' => $base ?? 'sha256:deliberately-stale',
 			'payload'      => $payload,
 		);
-		$request = $this->wp_rest_post_request( '/' . Api::ROUTE_NAMESPACE . '/push/' . $collection );
+		$route = 'variations' === $collection ? '/wcpos/v2/push/variations' : '/wcpos/v2/push/products';
+		$request = $this->wp_rest_post_request( $route );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_header( 'Idempotency-Key', $mid );
 		$request->set_header( 'If-Match', '"' . $envelope['baseRevision'] . '"' );
@@ -172,6 +172,26 @@ class Test_Rest_Dispatch_Stock_Delta extends Sync_REST_Store_Test_Case {
 		$this->assertSame( 1, $this->sales_fired );
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 9, $this->stock( $id ) );
+	}
+
+	/** A variation whose stock the parent manages never moves the parent's stock through the delta. */
+	public function test_parent_managed_variation_push_leaves_parent_stock_alone(): void {
+		$parent = ProductHelper::create_variation_product();
+		$parent->set_manage_stock( true );
+		$parent->set_stock_quantity( 10 );
+		$parent->save();
+		$id        = $parent->get_children()[0];
+		$variation = wc_get_product( $id );
+		$variation->set_manage_stock( false );
+		$variation->save();
+		$base = $this->held_revision( 'variations', $id );
+		add_filter( 'woocommerce_update_product_stock_query', array( $this, 'count_stock_query' ) );
+
+		$response = $this->push( 'variations', $id, $base, array( 'stock_quantity' => 12 ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 0, $this->stock_queries );
+		$this->assertSame( 10, $this->stock( $parent->get_id() ) );
 	}
 
 	/** An earlier sale invalidates the client's revision. */
