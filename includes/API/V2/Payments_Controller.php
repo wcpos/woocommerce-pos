@@ -114,7 +114,12 @@ class Payments_Controller extends WC_REST_Controller {
 										// A record with no row id is no command: its handler answers the 400. The command's origin
 										// (its body's provenance) names the register that completes the sale, if it does; a replay's heal too.
 										$gate   = in_array( $kind, Payment_Veto::KINDS, true ) && has_filter( 'wcpos_payment_pre_capture' )
-											? fn() => Payment_Veto::check( $order, $kind, $this->veto_context( $kind, $request, $order ) )
+											? fn() => Payment_Veto::check(
+												$order,
+												$kind,
+												$this->veto_context( $kind, $request, $order ),
+												'capture' === $kind ? fn() => Payment_Veto::settled( $order, strtolower( (string) $request['uuid'] ) ) : null
+											)
 											: null;
 										$result = null === $command ? $handler( null ) : Command_Log::run( $order, $command, $handler, $gate );
 										return $this->answer( $result, $kind, (int) $request['id'] );
