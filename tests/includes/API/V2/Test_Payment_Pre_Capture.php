@@ -41,6 +41,7 @@ class Test_Payment_Pre_Capture extends WCPOS_REST_Unit_Test_Case {
 		Veto_Route_Handler::$captures = 0;
 		Veto_Route_Handler::$status = null;
 		Veto_Route_Handler::$status_calls = 0;
+		Veto_Provider_Handler::$provider_status_calls = 0;
 		Logger::reset_dedup_state();
 		$this->logged_messages = array();
 		$this->logged_levels   = array();
@@ -182,6 +183,49 @@ class Test_Payment_Pre_Capture extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( $level, Logger::$log_level );
 	}
 
+	/** The settled-capture warning logs the callback's original refusal code. */
+	public function test_pre_capture_settled_capture_logs_callback_code(): void {
+		$this->use_route_handler();
+		$order   = $this->create_pos_order();
+		$payment = $this->intended( $order, '92.95' );
+		Veto_Route_Handler::$status = 'captured';
+		$this->refuse( array( 'capture' ), 'store_refused' );
+
+		$response = $this->command( $this->payment_path( $order, $payment['id'] ) . '/capture', $this->envelope( $order ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$messages = array_filter(
+			$this->logged_messages,
+			static fn( $message ) => false !== strpos( $message, 'already holds' ) && false !== strpos( $message, '"code":"store_refused"' )
+		);
+		$this->assertSame( 1, count( $messages ) );
+	}
+
+	/** The row's provider reports settlement even when the mode-only handler still sees a pending row. */
+	public function test_pre_capture_settled_capture_uses_provider_handler(): void {
+		$this->use_route_handler();
+		Capture_Mode_Registry::instance()->register( 'veto_route:acme', Veto_Provider_Handler::class );
+		$order = $this->create_pos_order();
+		$row   = array(
+			'id'           => 'b4f666a5-b955-4529-92a6-b6ee71f4ad5d',
+			'method_id'    => 'pos_cash',
+			'kind'         => 'cash',
+			'capture_mode' => 'veto_route',
+			'provider'     => 'acme',
+			'amount'       => '92.95',
+			'status'       => 'pending',
+		);
+		Ledger_Seed::rows( $order, array( $row ), false );
+		$this->refuse( array( 'capture' ) );
+
+		$response = $this->command( $this->payment_path( $order, $row['id'] ) . '/capture', $this->envelope( $order ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'captured', $this->stored_row( $order->get_id(), $row['id'] )['status'] );
+		$this->assertSame( 1, Veto_Provider_Handler::$provider_status_calls );
+		$this->assertSame( 0, Veto_Route_Handler::$status_calls );
+	}
+
 	/**
 	 * An unreadable status must not prevent recording the capture.
 	 *
@@ -213,6 +257,7 @@ class Test_Payment_Pre_Capture extends WCPOS_REST_Unit_Test_Case {
 		return array(
 			'wp_error' => array( new WP_Error( 'wcpos_test_status', 'down' ) ),
 			'throws'   => array( new \RuntimeException( 'status down' ) ),
+			'error'    => array( new \Error( 'status fatal' ) ),
 		);
 	}
 
@@ -970,6 +1015,22 @@ class Veto_Route_Handler extends \WCPOS\WooCommercePOS\Payments\Contract\Manual_
 	public function capture( array $row, array $context ) {
 		++self::$captures;
 		return array_merge( array( 'status' => 'captured' ), $context );
+	}
+}
+
+/** Reports a settled payment for the provider registered on the row. */
+class Veto_Provider_Handler extends Veto_Route_Handler {
+	/** @var int Provider-specific status calls. */
+	public static $provider_status_calls = 0;
+
+	/**
+	 * Return the provider's captured status without changing the stored row.
+	 *
+	 * @param array $row Payment row.
+	 */
+	public function status( array $row ) {
+		++self::$provider_status_calls;
+		return array_merge( $row, array( 'status' => 'captured' ) );
 	}
 }
 // phpcs:enable Generic.Files.OneObjectStructurePerFile.MultipleFound

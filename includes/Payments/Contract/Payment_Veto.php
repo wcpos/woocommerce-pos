@@ -86,6 +86,8 @@ final class Payment_Veto {
 			 * and when it reports `captured`, or the status cannot be read, the capture is recorded and the refusal is logged
 			 * at warning level with its code. `$context` carries no `settled` key, because that status is asked only after
 			 * the callback has answered. Refuse such payments at `intent`, or at `close` once the balance changed.
+			 * An order change the callback saved before refusing still stands when that refusal is not applied, so the
+			 * refusal at `close` sees it.
 			 *
 			 * @since 2.0.7
 			 *
