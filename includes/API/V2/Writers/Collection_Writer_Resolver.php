@@ -28,6 +28,9 @@ final class Collection_Writer_Resolver {
 		if ( 'product_variation' === ( $meta['post_type'] ?? '' ) ) {
 			return new Variation_Writer();
 		}
+		if ( 'product' === ( $meta['post_type'] ?? '' ) ) {
+			return new Product_Writer();
+		}
 		switch ( $meta['id_type'] ?? '' ) {
 			case 'order':
 				return new Order_Writer( $this->store, new Order_Write_Payload() );
