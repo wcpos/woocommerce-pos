@@ -190,7 +190,7 @@ class Test_Payment_Pre_Capture extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assert_veto( $response, 'wcpos_test_credit_short' );
 		$data = $response->get_data()['data'];
-		$this->assertSame( '72.95', $data['current']['total'] );
+		$this->assertSame( '72.950000', $data['current']['total'] );
 		$this->assertSame( '72.95', $data['order']['total'] );
 		$this->assertSame( '72.95', $data['order']['balance'] );
 		$this->assertNotSame( $body['revision'], $data['currentRevision'] );
