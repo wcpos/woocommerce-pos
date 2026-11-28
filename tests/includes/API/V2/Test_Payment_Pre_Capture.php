@@ -670,6 +670,33 @@ class Test_Payment_Pre_Capture extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * The record context carries the till's offline claim.
+	 *
+	 * @dataProvider offline_claims
+	 * @param array $extra    Additional payment fields.
+	 * @param bool  $expected Expected offline claim.
+	 */
+	public function test_pre_capture_record_context_carries_offline_claim( array $extra, bool $expected ): void {
+		$order = $this->create_pos_order();
+		$this->refuse( array() );
+
+		$response = $this->record( $order, $this->payment( 'pos_cash', '50.00', $extra ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assert_call( $order, 'record', 5000, 'pos_cash', $expected );
+	}
+
+	/** Offline claims supplied or omitted by the till. */
+	public static function offline_claims(): array {
+		return array(
+			'true'   => array( array( 'recorded_offline' => true ), true ),
+			'false'  => array( array( 'recorded_offline' => false ), false ),
+			'one'    => array( array( 'recorded_offline' => 1 ), true ),
+			'absent' => array( array(), false ),
+		);
+	}
+
+	/**
 	 * Observe each call and refuse just the listed kinds.
 	 *
 	 * @param array  $kinds   Kinds to refuse.
@@ -723,13 +750,17 @@ class Test_Payment_Pre_Capture extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Check exactly one call, including the full cashier context.
 	 *
-	 * @param \WC_Order   $order  Order object.
-	 * @param string      $kind   Command kind.
-	 * @param int|null    $amount Amount in minor units.
-	 * @param string|null $method Method id.
+	 * @param \WC_Order   $order            Order object.
+	 * @param string      $kind             Command kind.
+	 * @param int|null    $amount           Amount in minor units.
+	 * @param string|null $method           Method id.
+	 * @param bool        $recorded_offline Expected offline claim for record.
 	 */
-	private function assert_call( \WC_Order $order, string $kind, ?int $amount, ?string $method ): void {
+	private function assert_call( \WC_Order $order, string $kind, ?int $amount, ?string $method, bool $recorded_offline = false ): void {
 		$context = array( 'amount' => $amount, 'method' => $method, 'cashier_id' => get_current_user_id() );
+		if ( 'record' === $kind ) {
+			$context['recorded_offline'] = $recorded_offline;
+		}
 		$this->assertSame( array( array( 'kind' => $kind, 'context' => $context, 'order_id' => $order->get_id() ) ), $this->calls );
 	}
 

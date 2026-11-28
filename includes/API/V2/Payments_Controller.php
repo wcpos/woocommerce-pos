@@ -140,6 +140,7 @@ class Payments_Controller extends WC_REST_Controller {
 
 	/**
 	 * Describe the proposed payment to the pre-capture filter.
+	 * Only `record` includes the `recorded_offline` claim.
 	 *
 	 * @param string          $kind    Command kind.
 	 * @param WP_REST_Request $request Request object.
@@ -162,11 +163,16 @@ class Payments_Controller extends WC_REST_Controller {
 			$amount = is_scalar( $payment['amount'] ?? null ) && is_numeric( $payment['amount'] ) ? Money::minor( $payment['amount'] ) : null;
 			$method = is_string( $payment['method_id'] ?? null ) && '' !== $payment['method_id'] ? $payment['method_id'] : null;
 		}
-		return array(
+		$context = array(
 			'amount'     => $amount,
 			'method'     => $method,
 			'cashier_id' => get_current_user_id(),
 		);
+		if ( 'record' === $kind ) {
+			// The till's own claim, cast as the stored row casts it.
+			$context['recorded_offline'] = is_array( $payment ) && (bool) ( $payment['recorded_offline'] ?? false );
+		}
+		return $context;
 	}
 
 	/**
