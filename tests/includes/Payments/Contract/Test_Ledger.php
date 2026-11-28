@@ -884,7 +884,11 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'wcpos_command_conflict', $error->get_error_code() );
 	}
 
-	/** @dataProvider annotation_statuses */
+	/**
+	 * A failed row stores a same-status annotation's events and provider refs, never its status, reason or money.
+	 *
+	 * @dataProvider annotation_statuses
+	 */
 	public function test_failed_row_stores_a_same_status_annotation( array $status ): void {
 		// Arrange.
 		$order = $this->create_pos_order();
@@ -970,7 +974,11 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/** @dataProvider other_money */
+	/**
+	 * A failed row ignores an annotation whose amount or currency differs from its own.
+	 *
+	 * @dataProvider other_money
+	 */
 	public function test_failed_row_ignores_an_annotation_with_other_money( array $money ): void {
 		// Arrange.
 		$order = $this->create_pos_order();
@@ -4172,11 +4180,18 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	private function failed_row( \WC_Order $order ): array {
-		$row = Ledger::instance()->record( $order, $this->payment( 'pos_cash', '20.00', array( 'status' => 'pending' ) ) );
-		$row['status']         = 'failed';
-		$row['failure_reason'] = 'declined_or_cancelled';
-		$row['events']         = array( array( 'type' => 'declined' ) );
-		$row['provider_refs']  = array( 'reader' => 'sn-1' );
+		$row = $this->payment(
+			'pos_cash',
+			'20.00',
+			array(
+				'kind'           => 'cash',
+				'capture_mode'   => 'manual',
+				'status'         => 'failed',
+				'failure_reason' => 'declined_or_cancelled',
+				'events'         => array( array( 'type' => 'declined' ) ),
+				'provider_refs'  => array( 'reader' => 'sn-1' ),
+			)
+		);
 		Ledger_Seed::rows( $order, array( $row ) );
 		return Ledger::instance()->find( wc_get_order( $order->get_id() ), $row['id'] );
 	}
