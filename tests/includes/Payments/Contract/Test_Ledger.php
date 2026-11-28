@@ -884,6 +884,122 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'wcpos_command_conflict', $error->get_error_code() );
 	}
 
+	/** @dataProvider annotation_statuses */
+	public function test_failed_row_stores_a_same_status_annotation( array $status ): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$row   = $this->failed_row( $order );
+		$patch = $status + array(
+			'amount'         => $row['amount'],
+			'currency'       => $row['currency'],
+			'failure_reason' => 'other_reason',
+			'events'         => array_merge( $row['events'], array( array( 'type' => 'late_charge' ) ) ),
+			'provider_refs'  => array( 'charge' => 'txn_1' ),
+			'event_id'       => 'evt_late',
+		);
+
+		// Act.
+		Ledger::instance()->apply_result( $order, $row['id'], $patch );
+
+		// Assert.
+		$stored = Ledger::instance()->find( wc_get_order( $order->get_id() ), $row['id'] );
+		$this->assertSame( 'failed', $stored['status'] );
+		$this->assertSame( 'declined_or_cancelled', $stored['failure_reason'] );
+		$this->assertSame( '20.00', $stored['amount'] );
+		$this->assertSame( array( array( 'type' => 'declined' ), array( 'type' => 'late_charge' ) ), $stored['events'] );
+		$this->assertSame( array( 'reader' => 'sn-1', 'charge' => 'txn_1' ), $stored['provider_refs'] );
+		$this->assertContains( 'evt_late', $stored['seen_events'] );
+	}
+
+	public function annotation_statuses(): array {
+		return array(
+			'status failed' => array( array( 'status' => 'failed' ) ),
+			'status absent' => array( array() ),
+		);
+	}
+
+	/** A replay cannot replace an annotation already stored for the same event. */
+	public function test_failed_row_annotation_is_stored_once_per_event(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$row   = $this->failed_row( $order );
+		$patch = array(
+			'status'         => 'failed',
+			'amount'         => $row['amount'],
+			'currency'       => $row['currency'],
+			'failure_reason' => 'other_reason',
+			'events'         => array_merge( $row['events'], array( array( 'type' => 'late_charge' ) ) ),
+			'provider_refs'  => array( 'charge' => 'txn_1' ),
+			'event_id'       => 'evt_late',
+		);
+		$replay = $patch;
+		$replay['events'][]                = array( 'type' => 'again' );
+		$replay['provider_refs']['charge'] = 'txn_2';
+
+		// Act.
+		Ledger::instance()->apply_result( $order, $row['id'], $patch );
+		Ledger::instance()->apply_result( $order, $row['id'], $replay );
+
+		// Assert.
+		$stored = Ledger::instance()->find( wc_get_order( $order->get_id() ), $row['id'] );
+		$this->assertSame( $patch['events'], $stored['events'] );
+		$this->assertSame( 'txn_1', $stored['provider_refs']['charge'] );
+	}
+
+	/** A captured result cannot change a failed payment. */
+	public function test_failed_row_refuses_a_captured_patch(): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$row   = $this->failed_row( $order );
+		$patch = array(
+			'status'        => 'captured',
+			'amount'        => $row['amount'],
+			'currency'      => $row['currency'],
+			'events'        => array_merge( $row['events'], array( array( 'type' => 'late_charge' ) ) ),
+			'provider_refs' => array( 'charge' => 'txn_1' ),
+		);
+
+		// Act.
+		$result = Ledger::instance()->apply_result( $order, $row['id'], $patch );
+
+		// Assert.
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$stored = Ledger::instance()->find( wc_get_order( $order->get_id() ), $row['id'] );
+		foreach ( array( 'status', 'failure_reason', 'amount', 'events', 'provider_refs' ) as $field ) {
+			$this->assertSame( $row[ $field ], $stored[ $field ], $field );
+		}
+	}
+
+	/** @dataProvider other_money */
+	public function test_failed_row_ignores_an_annotation_with_other_money( array $money ): void {
+		// Arrange.
+		$order = $this->create_pos_order();
+		$row   = $this->failed_row( $order );
+		$patch = $money + array(
+			'status'        => 'failed',
+			'amount'        => '20.00',
+			'currency'      => $row['currency'],
+			'events'        => array_merge( $row['events'], array( array( 'type' => 'late_charge' ) ) ),
+			'provider_refs' => array( 'charge' => 'txn_1' ),
+		);
+
+		// Act.
+		Ledger::instance()->apply_result( $order, $row['id'], $patch );
+
+		// Assert.
+		$stored = Ledger::instance()->find( wc_get_order( $order->get_id() ), $row['id'] );
+		foreach ( array( 'events', 'provider_refs', 'status', 'amount' ) as $field ) {
+			$this->assertSame( $row[ $field ], $stored[ $field ], $field );
+		}
+	}
+
+	public function other_money(): array {
+		return array(
+			'amount'   => array( array( 'amount' => '21.00' ) ),
+			'currency' => array( array( 'currency' => 'XTS' ) ),
+		);
+	}
+
 	/** @dataProvider capture_confirmations */
 	public function test_capture_verifies_provider_money( array $confirmed, string $tips, bool $mismatch ): void {
 		$order = $this->create_pos_order();
@@ -4053,6 +4169,16 @@ class Test_Ledger extends WCPOS_REST_Unit_Test_Case {
 		);
 		$this->assertInstanceOf( \WC_Order_Refund::class, $refund );
 		return $refund;
+	}
+
+	private function failed_row( \WC_Order $order ): array {
+		$row = Ledger::instance()->record( $order, $this->payment( 'pos_cash', '20.00', array( 'status' => 'pending' ) ) );
+		$row['status']         = 'failed';
+		$row['failure_reason'] = 'declined_or_cancelled';
+		$row['events']         = array( array( 'type' => 'declined' ) );
+		$row['provider_refs']  = array( 'reader' => 'sn-1' );
+		Ledger_Seed::rows( $order, array( $row ) );
+		return Ledger::instance()->find( wc_get_order( $order->get_id() ), $row['id'] );
 	}
 
 	private function create_pos_order(): \WC_Order {
