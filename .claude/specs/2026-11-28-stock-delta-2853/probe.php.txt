@@ -1,0 +1,150 @@
+<?php
+/**
+ * THROWAWAY investigation probe (not for commit): a stock sale landing between
+ * the push's baseRevision compare and the wc/v3 save.
+ *
+ * @package WCPOS\WooCommercePOS\Tests\Sync
+ */
+
+namespace WCPOS\WooCommercePOS\Tests\Sync;
+
+// phpcs:disable
+
+require_once __DIR__ . '/Test_Rest_Dispatch_Write_Contract.php';
+
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use WCPOS\WooCommercePOS\Sync\Api;
+use WP_REST_Request;
+
+class Test_Lost_Update_Probe extends Sync_REST_Store_Test_Case {
+	private $store;
+	private $previous_manage_stock;
+	private $sale_qty = 0;
+	private $sale_target = 0;
+	private $sales_fired = 0;
+	private $seq = 0;
+
+	public function setUp(): void {
+		$this->previous_manage_stock = get_option( 'woocommerce_manage_stock', 'no' );
+		$this->store                 = new Dispatch_Fake_Mutation_Store();
+		Dispatch_Write_Controller::$store = $this->store;
+		parent::setUp();
+		update_option( 'woocommerce_manage_stock', 'yes' );
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
+	}
+
+	public function rest_api_init(): void {
+		$inject = static function ( array $controllers ): array {
+			$controllers['sync-write'] = Dispatch_Write_Controller::class;
+			return $controllers;
+		};
+		add_filter( 'wcpos_rest_api_controllers', $inject, 99 );
+		parent::rest_api_init();
+		remove_filter( 'wcpos_rest_api_controllers', $inject, 99 );
+	}
+
+	public function tearDown(): void {
+		remove_filter( 'woocommerce_rest_pre_insert_product_object', array( $this, 'sale_in_window' ), 10 );
+		remove_filter( 'woocommerce_rest_pre_insert_product_variation_object', array( $this, 'sale_in_window' ), 10 );
+		update_option( 'woocommerce_manage_stock', $this->previous_manage_stock );
+		parent::tearDown();
+	}
+
+	/** The concurrent till sale / checkout: WooCommerce's own relative, SQL-atomic decrement. */
+	public function sale_in_window( $product ) {
+		if ( $this->sale_qty > 0 && 0 === $this->sales_fired ) {
+			++$this->sales_fired;
+			wc_update_product_stock( $this->sale_target, $this->sale_qty, 'decrease' );
+		}
+		return $product;
+	}
+
+	private function push( string $collection, int $id, ?string $base, array $payload ) {
+		++$this->seq;
+		$mid = sprintf( '30000000-0000-4000-8000-%012d', $this->seq );
+		$rid = '40000000-0000-4000-8000-000000000001';
+		$this->store->resolve = $id;
+		$envelope = array(
+			'mutationId'   => $mid,
+			'operation'    => 'update',
+			'collection'   => $collection,
+			'recordId'     => $rid,
+			'baseRevision' => $base ?? 'sha256:deliberately-stale',
+			'payload'      => $payload,
+		);
+		$request = $this->wp_rest_post_request( '/' . Api::ROUTE_NAMESPACE . '/push/' . $collection );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_header( 'Idempotency-Key', $mid );
+		$request->set_header( 'If-Match', '"' . $envelope['baseRevision'] . '"' );
+		$request->set_body( (string) wp_json_encode( $envelope ) );
+		return $this->server->dispatch( $request );
+	}
+
+	/** The revision a client holding the current row would send (read off a 409). */
+	private function held_revision( string $collection, int $id ): string {
+		$r = $this->push( $collection, $id, null, array( 'regular_price' => '1.00' ) );
+		$this->assertSame( 409, $r->get_status() );
+		return $r->get_data()['currentRevision'];
+	}
+
+	private function stock( int $id ) {
+		wp_cache_flush();
+		return wc_get_product( $id )->get_stock_quantity();
+	}
+
+	public function test_control_sale_before_read_is_refused_with_409(): void {
+		$p    = ProductHelper::create_simple_product( array( 'manage_stock' => true, 'stock_quantity' => 10, 'regular_price' => 10 ) );
+		$base = $this->held_revision( 'products', $p->get_id() );
+		wc_update_product_stock( $p->get_id(), 3, 'decrease' );
+		$r = $this->push( 'products', $p->get_id(), $base, array( 'stock_quantity' => 12 ) );
+		fwrite( STDERR, "\n[control] status=" . $r->get_status() . ' stock=' . $this->stock( $p->get_id() ) . "\n" );
+		$this->assertSame( 409, $r->get_status() );
+		$this->assertSame( 7, $this->stock( $p->get_id() ) );
+	}
+
+	public function test_product_stock_push_with_sale_in_window_loses_the_sale(): void {
+		$p    = ProductHelper::create_simple_product( array( 'manage_stock' => true, 'stock_quantity' => 10, 'regular_price' => 10 ) );
+		$base = $this->held_revision( 'products', $p->get_id() );
+		$this->sale_qty    = 3;
+		$this->sale_target = $p->get_id();
+		add_filter( 'woocommerce_rest_pre_insert_product_object', array( $this, 'sale_in_window' ), 10 );
+		$t = microtime( true );
+		$r = $this->push( 'products', $p->get_id(), $base, array( 'stock_quantity' => 12 ) );
+		$ms = ( microtime( true ) - $t ) * 1000;
+		fwrite( STDERR, sprintf( "\n[product stock] status=%d sales=%d final=%s (10 +2 received -3 sold => 9 or a 409 expected) push_ms=%.1f\n", $r->get_status(), $this->sales_fired, var_export( $this->stock( $p->get_id() ), true ), $ms ) );
+		$this->assertSame( 1, $this->sales_fired );
+		$this->assertSame( 200, $r->get_status() );
+		$this->assertSame( 12, $this->stock( $p->get_id() ), 'lost decrement: the pushed absolute 12 overwrote the sale' );
+	}
+
+	public function test_product_price_push_with_sale_in_window_keeps_the_sale(): void {
+		$p    = ProductHelper::create_simple_product( array( 'manage_stock' => true, 'stock_quantity' => 10, 'regular_price' => 10 ) );
+		$base = $this->held_revision( 'products', $p->get_id() );
+		$this->sale_qty    = 3;
+		$this->sale_target = $p->get_id();
+		add_filter( 'woocommerce_rest_pre_insert_product_object', array( $this, 'sale_in_window' ), 10 );
+		$r = $this->push( 'products', $p->get_id(), $base, array( 'regular_price' => '11.00' ) );
+		fwrite( STDERR, "\n[product price] status=" . $r->get_status() . ' sales=' . $this->sales_fired . ' final=' . var_export( $this->stock( $p->get_id() ), true ) . "\n" );
+		$this->assertSame( 1, $this->sales_fired );
+		$this->assertSame( 200, $r->get_status() );
+		$this->assertSame( 7, $this->stock( $p->get_id() ) );
+	}
+
+	public function test_variation_stock_push_with_sale_in_window_loses_the_sale(): void {
+		$parent = ProductHelper::create_variation_product();
+		$vid    = $parent->get_children()[0];
+		$v      = wc_get_product( $vid );
+		$v->set_manage_stock( true );
+		$v->set_stock_quantity( 10 );
+		$v->save();
+		$base = $this->held_revision( 'variations', $vid );
+		$this->sale_qty    = 3;
+		$this->sale_target = $vid;
+		add_filter( 'woocommerce_rest_pre_insert_product_variation_object', array( $this, 'sale_in_window' ), 10 );
+		$r = $this->push( 'variations', $vid, $base, array( 'stock_quantity' => 12 ) );
+		fwrite( STDERR, "\n[variation stock] status=" . $r->get_status() . ' sales=' . $this->sales_fired . ' final=' . var_export( $this->stock( $vid ), true ) . "\n" );
+		$this->assertSame( 1, $this->sales_fired );
+		$this->assertSame( 200, $r->get_status() );
+		$this->assertSame( 12, $this->stock( $vid ), 'lost decrement on a variation' );
+	}
+}

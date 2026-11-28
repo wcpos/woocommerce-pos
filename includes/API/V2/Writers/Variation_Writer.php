@@ -18,7 +18,7 @@ use WP_REST_Request;
 use WP_REST_Response;
 
 /** Enforces variation parents, nested routes, and bare documents. */
-class Variation_Writer extends Null_Writer {
+class Variation_Writer extends Product_Writer {
 	/** Prepare a nested variation create. */
 	public function prepare_create( array $meta, array $payload, callable $validate_tax_ids ) {
 		$parent_id = $this->required_parent_id( $payload );
@@ -43,12 +43,13 @@ class Variation_Writer extends Null_Writer {
 		if ( array_key_exists( 'parent_id', $payload ) && ( ! is_int( $payload['parent_id'] ) || $parent_id !== $payload['parent_id'] ) ) {
 			return $this->parent_mismatch();
 		}
-		return array(
+		$prepared = array(
 			'method' => 'PUT',
 			'route' => $meta['route'] . '/' . $parent_id . '/variations/' . $id,
 			'payload' => $payload,
 			'context' => array( 'parent_id' => $parent_id ),
 		);
+		return $this->defer_stock( $id, $prepared );
 	}
 
 	/** Confirm a born-twice variation still belongs to the requested parent. */
