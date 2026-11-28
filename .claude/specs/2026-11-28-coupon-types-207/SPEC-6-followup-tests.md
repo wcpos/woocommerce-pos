@@ -39,11 +39,20 @@ High tier (a money route on the core plugin), but this job changes tests only.
 1. In `reserved_codes()`, add one row after `'core service stock'`:
    `'core service unreadable' => array( 'wcpos_order_unreadable' ),`
    Re-align the `=>` arrows of all seven rows to the longest key.
-2. In `test_pre_capture_record_replay_skips_veto()`, replace the assertion on `['payment']['id']` with `$this->assertSame( $first->get_data(), $replay->get_data() );`. Keep the status assertion and the `$this->calls` assertion. Nothing else in that test changes.
+2. In `test_pre_capture_record_replay_skips_veto()`, replace the assertion on `['payment']['id']` with these two lines:
+
+   ```php
+   // The wire form the till reads: the answer holds stdClass values, which assertSame compares by instance.
+   $this->assertSame( wp_json_encode( $first->get_data() ), wp_json_encode( $replay->get_data() ) );
+   ```
+
+   Keep the status assertion and the `$this->calls` assertion. Nothing else in that test changes.
+
+   Why JSON: a first run that compared the arrays directly failed only on `provider_refs` and `receipt`, two empty `stdClass` values that are equal but not the same instance. The JSON comparison is the real contract.
 3. Add `test_pre_capture_close_replay_skips_veto()` directly after `test_pre_capture_record_replay_skips_veto()`, with the one-line docblock `/** A replayed close answers from the command log and never asks for a veto. */`:
    - Arrange: `create_pos_order()`, then `Ledger_Seed::rows( $order, array( $this->captured_row( '92.95' ) ), false );` exactly as in the close-refused test. Build the body once: `$route = '/wcpos/v2/orders/' . $order->get_id() . '/close';` and `$body = $this->envelope( $order );`. Send it with `$first = $this->command( $route, $body );` and assert its status is 200. Then `$this->refuse( array( 'close' ) );`.
    - Act: `$replay = $this->command( $route, $body );` with the same `$body`.
-   - Assert, with `assertSame` and `( expected, actual )`: status 200; `$first->get_data()` identical to `$replay->get_data()`; `array()` identical to `$this->calls`.
+   - Assert, with `assertSame` and `( expected, actual )`: status 200; `wp_json_encode( $first->get_data() )` identical to `wp_json_encode( $replay->get_data() )`, with the same comment line as in constraint 2 above it; `array()` identical to `$this->calls`.
 
 ## Do not
 
