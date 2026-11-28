@@ -89,12 +89,16 @@ final class Payment_Veto {
 			 * An order change the callback saved before refusing still stands when that refusal is not applied, so the
 			 * refusal at `close` sees it.
 			 *
+			 * For `record`, `$context['recorded_offline']` is the till's own claim that the sale was finished while the
+			 * store was unreachable; a callback may choose to allow such a payment and refuse at `close` instead. Core
+			 * does not check the claim and never applies a refusal differently because of it.
+			 *
 			 * @since 2.0.7
 			 *
 			 * @param null|WP_Error $veto    Null to allow.
 			 * @param WC_Order      $order   The order, read under the lock.
 			 * @param string        $kind    record|intent|submit|capture|close.
-			 * @param array         $context ['amount' => minor units or null, 'method' => id or null, 'cashier_id' => int].
+			 * @param array         $context ['amount' => minor units or null, 'method' => id or null, 'cashier_id' => int, 'recorded_offline' => bool, record only].
 			 */
 			$veto = apply_filters( 'wcpos_payment_pre_capture', null, $order, $kind, $context );
 		} catch ( \Throwable $error ) {
