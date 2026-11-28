@@ -216,8 +216,9 @@ final class Changes_Controller extends WP_REST_Controller {
 		// The catalogue-only `all` stream and the narrowed streams explicitly name
 		// their object types — products span TWO of them in the one
 		// global sequence. The page's `head` is read after the rows, which is the
-		// head this envelope must carry (see its use below).
-		$page = $this->journal->page( $stream_types, $since, $limit );
+		// head this envelope must carry (see its use below). The orders stream holds
+		// back: its rows and head stop before a number an open transaction may commit.
+		$page = $this->journal->page( $stream_types, $since, $limit, $is_orders );
 		$rows = $page['rows'];
 
 		// Orders have their own row path; the catalogue loop below only moves their cursor.

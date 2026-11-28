@@ -11,6 +11,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+use Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Services\Order_Meta_Store;
@@ -42,7 +43,20 @@ class Test_Order_Change_Stream extends Sync_REST_Store_Test_Case {
 	 */
 	public function setUp(): void {
 		parent::setUp();
+		global $wpdb;
 		$this->journal = new Sync_Journal();
+		// An hour-old row with the next AUTO_INCREMENT number, so the first young row of a case
+		// directly follows a present row and the orders stream's hold-back sees no gap before it.
+		$stamp = gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS );
+		$wpdb->insert(
+			$this->journal->table_name(),
+			array(
+				'object_type'  => 'tax_rate',
+				'object_id'    => 1,
+				'modified_gmt' => $stamp,
+				'created_gmt'  => $stamp,
+			)
+		);
 		$this->journal->register_hooks();
 	}
 
@@ -511,6 +525,134 @@ class Test_Order_Change_Stream extends Sync_REST_Store_Test_Case {
 
 		// Assert.
 		$this->assertSame( array_map( static fn( \WC_Order $order ): int => $order->get_id(), $orders ), $served );
+	}
+
+	/**
+	 * A young missing number holds the page below it, an at-head poll gets an empty 200 rather
+	 * than a 304, and once the row after it is old the stream passes it.
+	 */
+	public function test_orders_stream_young_gap_holds_page_until_row_after_it_is_old(): void {
+		// Arrange.
+		global $wpdb;
+		$this->changed_order();
+		$newest  = $this->changed_order();
+		$head    = $this->orders_head();
+		$removed = $wpdb->delete( $this->journal->table_name(), array( 'sequence' => $head - 1 ) );
+
+		// Act.
+		$held  = $this->sequence_log( 'orders' );
+		$data  = $held->get_data();
+		$again = $this->sequence_log( 'orders', $data['checkpoint']['head'], 100, $held->get_headers()['ETag'] );
+		$wpdb->update( $this->journal->table_name(), array( 'created_gmt' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ), array( 'sequence' => $head ) );
+		$passed = $this->sequence_log( 'orders', $data['checkpoint']['head'] )->get_data();
+
+		// Assert.
+		$this->assertSame( 1, $removed, 'Precondition: a row held the number before the newest.' );
+		$this->assertSame( $data['checkpoint']['head'], $data['checkpoint']['since'] );
+		$this->assertLessThan( $head - 1, $data['checkpoint']['head'] );
+		$this->assertTrue( $data['complete'] );
+		$this->assertSame( 200, $again->get_status() );
+		$this->assertSame( array(), $again->get_data()['changes'] );
+		$this->assertSame( $data['checkpoint']['head'], $again->get_data()['checkpoint']['since'], 'An empty held page keeps the cursor.' );
+		$this->assertSame( array( $newest->get_id() ), array_column( $passed['changes'], 'id' ) );
+		$this->assertSame( $head, $passed['checkpoint']['since'] );
+		$this->assertSame( $head, $passed['checkpoint']['head'] );
+	}
+
+	/**
+	 * The same young gap leaves the catalogue stream serving past it, with its real head.
+	 */
+	public function test_orders_stream_young_gap_leaves_catalogue_stream_serving_past_it(): void {
+		// Arrange.
+		global $wpdb;
+		$types   = Sync_Journal::catalogue_object_types();
+		$cursor  = $this->journal->head_sequence( $types );
+		$before  = ProductHelper::create_simple_product();
+		$gap     = ProductHelper::create_simple_product();
+		$after   = ProductHelper::create_simple_product();
+		$head    = $this->journal->head_sequence( $types );
+		$removed = $wpdb->delete(
+			$this->journal->table_name(),
+			array(
+				'object_type' => 'product',
+				'object_id'   => $gap->get_id(),
+			)
+		);
+
+		// Act.
+		$data = $this->sequence_log( 'all', $cursor )->get_data();
+
+		// Assert.
+		$products = array_filter( $data['changes'], static fn( array $change ): bool => 'products' === $change['collection'] );
+		$this->assertGreaterThan( 0, $removed, 'Precondition: the middle product left a gap.' );
+		$this->assertSame( array( $before->get_id(), $after->get_id() ), array_values( array_unique( array_column( $products, 'id' ) ) ) );
+		$this->assertSame( $head, $data['checkpoint']['since'] );
+		$this->assertSame( $head, $data['checkpoint']['head'] );
+	}
+
+	/**
+	 * An order with no origin record is served with an empty `created_via` and its other facts.
+	 */
+	public function test_orders_stream_order_without_origin_record_serves_empty_created_via(): void {
+		// Arrange.
+		global $wpdb;
+		$order  = $this->changed_order( array(), 'woocommerce-pos' );
+		$cursor = $this->orders_head();
+		$this->edit( $order );
+		if ( Order_Meta_Store::hpos() ) {
+			$removed = $wpdb->delete( OrdersTableDataStore::get_operational_data_table_name(), array( 'order_id' => $order->get_id() ) );
+		} else {
+			$removed = $wpdb->delete(
+				$wpdb->postmeta,
+				array(
+					'post_id'  => $order->get_id(),
+					'meta_key' => '_created_via', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- One row of one order.
+				)
+			);
+		}
+		$created = gmdate( 'Y-m-d H:i:s', $order->get_date_created()->getTimestamp() );
+
+		// Act.
+		$response = $this->sequence_log( 'orders', $cursor );
+
+		// Assert.
+		$this->assertSame( 1, $removed, 'Precondition: the origin record existed.' );
+		$this->assertSame(
+			array(
+				array(
+					'sequence'         => $this->orders_head(),
+					'id'               => $order->get_id(),
+					'deleted'          => 0,
+					'status'           => $order->get_status(),
+					'_pos_store'       => null,
+					'_pos_user'        => null,
+					'created_via'      => '',
+					'date_created_gmt' => mysql_to_rfc3339( $created ),
+				),
+			),
+			$response->get_data()['changes']
+		);
+	}
+
+	/**
+	 * A catalogue setting change moves the catalogue stream's ETag and leaves the orders
+	 * stream at 304.
+	 */
+	public function test_orders_stream_catalogue_setting_change_keeps_orders_at_304(): void {
+		// Arrange.
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
+		$this->changed_order();
+		$orders = $this->sequence_log( 'orders' );
+		$all    = $this->sequence_log( 'all' );
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_global_unique_id' ) );
+
+		// Act.
+		$orders_again = $this->sequence_log( 'orders', $orders->get_data()['checkpoint']['head'], 100, $orders->get_headers()['ETag'] );
+		$all_again    = $this->sequence_log( 'all' );
+
+		// Assert.
+		$this->assertSame( 304, $orders_again->get_status() );
+		$this->assertNotSame( $all->get_headers()['ETag'], $all_again->get_headers()['ETag'] );
 	}
 
 	/**
