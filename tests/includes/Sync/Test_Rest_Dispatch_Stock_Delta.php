@@ -28,6 +28,8 @@ class Test_Rest_Dispatch_Stock_Delta extends Sync_REST_Store_Test_Case {
 	private $seq = 0;
 	/** @var callable|null Listener that interrupts a stock write. */
 	private $stock_failure;
+	/** @var int Number of stock update queries. */
+	private $stock_queries = 0;
 
 	/** Enable stock management and dispatch as an administrator. */
 	public function setUp(): void {
@@ -52,6 +54,7 @@ class Test_Rest_Dispatch_Stock_Delta extends Sync_REST_Store_Test_Case {
 
 	/** Restore stock settings and remove listeners even after a failed assertion. */
 	public function tearDown(): void {
+		remove_filter( 'woocommerce_update_product_stock_query', array( $this, 'count_stock_query' ) );
 		remove_filter( 'woocommerce_rest_pre_insert_product_object', array( $this, 'sale_in_window' ), 10 );
 		remove_filter( 'woocommerce_rest_pre_insert_product_variation_object', array( $this, 'sale_in_window' ), 10 );
 		if ( null !== $this->stock_failure ) {
@@ -59,6 +62,11 @@ class Test_Rest_Dispatch_Stock_Delta extends Sync_REST_Store_Test_Case {
 		}
 		update_option( 'woocommerce_manage_stock', $this->previous_manage_stock );
 		parent::tearDown();
+	}
+
+	public function count_stock_query( $sql ) {
+		++$this->stock_queries;
+		return $sql;
 	}
 
 	/** Apply the concurrent checkout's atomic decrement before WooCommerce saves. */
@@ -182,11 +190,11 @@ class Test_Rest_Dispatch_Stock_Delta extends Sync_REST_Store_Test_Case {
 	public function test_zero_delta_writes_no_stock(): void {
 		$id     = ProductHelper::create_simple_product( array( 'manage_stock' => true, 'stock_quantity' => 10, 'regular_price' => 10 ) )->get_id();
 		$base   = $this->held_revision( 'products', $id );
-		$before = did_action( 'woocommerce_product_set_stock' );
+		add_filter( 'woocommerce_update_product_stock_query', array( $this, 'count_stock_query' ) );
 
 		$response = $this->push( 'products', $id, $base, array( 'stock_quantity' => 10, 'regular_price' => '11.00' ) );
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( $before, did_action( 'woocommerce_product_set_stock' ) );
+		$this->assertSame( 0, $this->stock_queries );
 		$this->assertSame( '11.00', wc_get_product( $id )->get_regular_price() );
 	}
 
@@ -202,12 +210,13 @@ class Test_Rest_Dispatch_Stock_Delta extends Sync_REST_Store_Test_Case {
 	public function test_manage_stock_turned_off_in_same_push_writes_no_stock(): void {
 		$id     = ProductHelper::create_simple_product( array( 'manage_stock' => true, 'stock_quantity' => 10 ) )->get_id();
 		$base   = $this->held_revision( 'products', $id );
-		$before = did_action( 'woocommerce_product_set_stock' );
+		add_filter( 'woocommerce_update_product_stock_query', array( $this, 'count_stock_query' ) );
 
 		$response = $this->push( 'products', $id, $base, array( 'manage_stock' => false, 'stock_quantity' => 12 ) );
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( $before, did_action( 'woocommerce_product_set_stock' ) );
+		$this->assertSame( 0, $this->stock_queries );
 		$this->assertSame( false, wc_get_product( $id )->get_manage_stock() );
+		$this->assertNull( $this->stock( $id ) );
 	}
 
 	/** The ack describes the post-sale, post-adjustment record. */
