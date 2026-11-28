@@ -135,7 +135,7 @@ The full probe source is `.claude/specs/2026-11-28-stock-delta-2853/probe.php.tx
 ## Budget
 
 - Max non-test lines changed: 110
-- Max total lines changed: 300
+- Max total lines changed: 360
 
 If you are about to exceed either, STOP and report why instead of continuing.
 Splitting the work across more files does not raise the budget.
