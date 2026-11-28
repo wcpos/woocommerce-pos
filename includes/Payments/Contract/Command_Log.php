@@ -87,10 +87,11 @@ final class Command_Log {
 	 * @param WC_Order      $order   Order, read under the lock.
 	 * @param Money_Command $command The command.
 	 * @param callable      $work    fn( Money_Command ): the handler's answer.
+	 * @param callable|null $gate    fn( Money_Command ): ?WP_Error, run after the replay and stale checks and before the work; a WP_Error it returns is the answer and nothing is stored.
 	 * @return mixed A refusal, a replay, or the work's answer.
 	 * @throws Ledger_Persistence_Exception When an entry does not reach storage: the retry replays.
 	 */
-	public static function run( WC_Order $order, Money_Command $command, callable $work ) {
+	public static function run( WC_Order $order, Money_Command $command, callable $work, ?callable $gate = null ) {
 		$ledger = Ledger::instance();
 		$stored = self::find( $order, $ledger->read( $order ), $command->id() );
 		if ( null !== $stored && $stored['fp'] !== $command->fp() ) {
@@ -110,6 +111,12 @@ final class Command_Log {
 		$stale = self::outdated( $order, $command->revision() );
 		if ( null !== $stale ) {
 			return $stale;
+		}
+		if ( null !== $gate ) {
+			$veto = $gate( $command );
+			if ( is_wp_error( $veto ) ) {
+				return $veto;
+			}
 		}
 		$answer = $work( $command );
 		if ( ! is_wp_error( $answer ) ) {

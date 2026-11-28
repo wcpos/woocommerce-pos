@@ -16,8 +16,10 @@ use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
 use WCPOS\WooCommercePOS\Payments\Contract\Descriptor_Builder;
 use WCPOS\WooCommercePOS\Payments\Contract\Gateway_Submission;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Persistence_Exception;
+use WCPOS\WooCommercePOS\Payments\Contract\Money;
 use WCPOS\WooCommercePOS\Payments\Contract\Money_Command;
 use WCPOS\WooCommercePOS\Payments\Contract\Order_Lock;
+use WCPOS\WooCommercePOS\Payments\Contract\Payment_Veto;
 use WCPOS\WooCommercePOS\Services\Fiscal_Record_Writers;
 use WCPOS\WooCommercePOS\Services\Permission_Rules;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
@@ -111,7 +113,10 @@ class Payments_Controller extends WC_REST_Controller {
 										$handler = fn( ?Money_Command $c ) => $this->{$definition[1]}( $request, $c );
 										// A record with no row id is no command: its handler answers the 400. The command's origin
 										// (its body's provenance) names the register that completes the sale, if it does; a replay's heal too.
-										$result = null === $command ? $handler( null ) : Command_Log::run( $order, $command, $handler );
+										$gate   = in_array( $kind, Payment_Veto::KINDS, true ) && has_filter( 'wcpos_payment_pre_capture' )
+											? fn() => Payment_Veto::check( $order, $kind, $this->veto_context( $kind, $request, $order ) )
+											: null;
+										$result = null === $command ? $handler( null ) : Command_Log::run( $order, $command, $handler, $gate );
 										return $this->answer( $result, $kind, (int) $request['id'] );
 									} catch ( Ledger_Persistence_Exception $error ) {
 										// The payment was not stored: a retryable conflict, never an acknowledgement.
@@ -126,6 +131,37 @@ class Payments_Controller extends WC_REST_Controller {
 				)
 			);
 		}
+	}
+
+	/**
+	 * Describe the proposed payment to the pre-capture filter.
+	 *
+	 * @param string          $kind    Command kind.
+	 * @param WP_REST_Request $request Request object.
+	 * @param WC_Order        $order   Order read under the lock.
+	 */
+	private function veto_context( string $kind, WP_REST_Request $request, WC_Order $order ): array {
+		$payment = null;
+		$method  = null;
+		$amount  = null;
+		if ( 'record' === $kind || 'intent' === $kind ) {
+			$params  = $request->get_json_params();
+			$params  = is_array( $params ) ? $params : $request->get_body_params();
+			$payment = $params['payment'] ?? null;
+		} elseif ( 'capture' === $kind ) {
+			$payment = Ledger::instance()->find( $order, strtolower( (string) $request['uuid'] ) );
+		} elseif ( 'submit' === $kind ) {
+			$method = (string) $request['method'];
+		}
+		if ( is_array( $payment ) ) {
+			$amount = is_scalar( $payment['amount'] ?? null ) && is_numeric( $payment['amount'] ) ? Money::minor( $payment['amount'] ) : null;
+			$method = is_string( $payment['method_id'] ?? null ) && '' !== $payment['method_id'] ? $payment['method_id'] : null;
+		}
+		return array(
+			'amount'     => $amount,
+			'method'     => $method,
+			'cashier_id' => get_current_user_id(),
+		);
 	}
 
 	/**
