@@ -24,7 +24,7 @@ final class Payment_Veto {
 		'wcpos_payment_locked',
 		'wcpos_revision_stale',
 		'woo_rxdb_sync_record_locked',
-		// Codes core itself answers on the payments routes (includes/Payments, Payments_Controller).
+		// Codes core itself answers on its money routes (includes/Payments, Payments_Controller, the V1 checkout) and from the services they call (Stock_Validator, Order_Serializer).
 		'wcpos_amount_exceeds_balance',
 		'wcpos_amount_mismatch',
 		'wcpos_balance_outstanding',
@@ -35,10 +35,12 @@ final class Payment_Veto {
 		'wcpos_fields_invalid',
 		'wcpos_idempotency_conflict',
 		'wcpos_idempotency_in_progress',
+		'wcpos_insufficient_stock',
 		'wcpos_invalid_transition',
 		'wcpos_method_not_recordable',
 		'wcpos_order_already_paid',
 		'wcpos_order_not_found',
+		'wcpos_order_unreadable',
 		'wcpos_payment_conflict',
 		'wcpos_payment_in_flight',
 		'wcpos_payment_method_disabled',
@@ -73,10 +75,10 @@ final class Payment_Veto {
 			 * A callback that receives a WP_Error returns it unchanged.
 			 *
 			 * Core answers a refusal with 409 in the shape of `wcpos_revision_stale` plus `vetoed: true`: the code is the
-			 * callback's when it starts with `wcpos_` and is not one of RESERVED_CODES, else `wcpos_payment_vetoed`;
-			 * the message is the callback's, translated
-			 * and readable by a cashier; `data.detail` is passed through from the error's data. Nothing is stored. A throw
-			 * or any other return value allows the command, and a throw is logged.
+			 * callback's when it starts with `wcpos_` and is not one of RESERVED_CODES, else
+			 * `wcpos_payment_vetoed`; the message is the callback's, translated and readable by a cashier;
+			 * `data.detail` is passed through from the error's data. Nothing is stored. A throw or any
+			 * other return value allows the command, and a throw is logged.
 			 *
 			 * @since 2.0.7
 			 *

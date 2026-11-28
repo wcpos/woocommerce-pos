@@ -357,7 +357,12 @@ class Test_Payment_Pre_Capture extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'Credit changed.', $response->get_data()['message'] );
 	}
 
-	/** @dataProvider reserved_codes */
+	/**
+	 * A reserved refusal code uses the default code and keeps the callback's message.
+	 *
+	 * @dataProvider reserved_codes
+	 * @param string $code Refusal code.
+	 */
 	public function test_pre_capture_reserved_code_uses_default_code_and_keeps_message( string $code ): void {
 		$order = $this->create_pos_order();
 		$this->refuse( array( 'record' ), $code, 'Credit changed.' );
@@ -376,6 +381,7 @@ class Test_Payment_Pre_Capture extends WCPOS_REST_Unit_Test_Case {
 			'resendable unprefixed' => array( 'woo_rxdb_sync_record_locked' ),
 			'core already paid'     => array( 'wcpos_order_already_paid' ),
 			'core conflict'         => array( 'wcpos_payment_conflict' ),
+			'core service stock'    => array( 'wcpos_insufficient_stock' ),
 		);
 	}
 
