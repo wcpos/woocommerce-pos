@@ -102,7 +102,7 @@ If you are about to exceed either, STOP and report why instead of continuing.
 ## Reviewer reruns (not for Codex)
 
 - Under wp-env: `Test_Payment_Pre_Capture.php` (all pass, 22 + 6 new cases), `Test_Payments_No_Veto_Golden.php` (unchanged, passes).
-- Mutations: drop the `RESERVED_CODES` term (each reserved row fails); drop group 1 only (the three resendable rows fail); invert to rewrite every code (the free-code test fails).
+- Mutations: drop the `RESERVED_CODES` term (the four prefixed reserved rows fail; `woo_rxdb_sync_record_locked` is still rewritten by the prefix rule); drop group 1 only (the two prefixed resendable rows fail); invert to rewrite every code (the free-code test fails). These are for the reviewer; Codex does not run them.
 - phpcs on `Payment_Veto.php`.
 
 ## Environment
