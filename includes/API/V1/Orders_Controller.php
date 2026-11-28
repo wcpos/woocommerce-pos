@@ -648,12 +648,17 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 
 		do_action( 'woocommerce_before_resend_order_emails', $order, 'customer_invoice' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce core hook.
-		add_filter( 'woocommerce_email_recipient_customer_invoice', array( $this, 'wcpos_recipient_email_address' ), 99 );
-
-		// Send the customer invoice email.
 		WC()->payment_gateways();
 		WC()->shipping();
-		WC()->mailer()->customer_invoice( $order );
+		$recipient = static function ( $address, $email_order ) use ( $order, $email ) {
+			return $email_order instanceof WC_Order && $email_order->get_id() === $order->get_id() ? $email : $address;
+		};
+		add_filter( 'woocommerce_email_recipient_customer_invoice', $recipient, 99, 2 );
+		try {
+			WC()->mailer()->customer_invoice( $order );
+		} finally {
+			remove_filter( 'woocommerce_email_recipient_customer_invoice', $recipient, 99 );
+		}
 
 		// Note the event.
 		// translators: %s: email address.
