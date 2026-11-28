@@ -58,11 +58,12 @@ final class Payment_Veto {
 	/**
 	 * Ask the store whether to refuse this command before its handler runs.
 	 *
-	 * @param WC_Order $order   Order read under the lock.
-	 * @param string   $kind    Command kind.
-	 * @param array    $context Amount, method and cashier.
+	 * @param WC_Order      $order   Order read under the lock.
+	 * @param string        $kind    Command kind.
+	 * @param array         $context Amount, method and cashier.
+	 * @param callable|null $settled For a capture only: answers why the provider already holds the money ('captured' or 'status_failed'), or null. Asked only after the callback refused.
 	 */
-	public static function check( WC_Order $order, string $kind, array $context ): ?WP_Error {
+	public static function check( WC_Order $order, string $kind, array $context, ?callable $settled = null ): ?WP_Error {
 		if ( ! in_array( $kind, self::KINDS, true ) || ! has_filter( 'wcpos_payment_pre_capture' ) ) {
 			return null;
 		}
@@ -79,6 +80,12 @@ final class Payment_Veto {
 			 * `wcpos_payment_vetoed`; the message is the callback's, translated and readable by a cashier;
 			 * `data.detail` is passed through from the error's data. Nothing is stored. A throw or any
 			 * other return value allows the command, and a throw is logged.
+			 *
+			 * For `capture`, a refusal is not applied when the provider already holds the money (a card reader that charged
+			 * before the till posted the capture): after the callback refuses, core asks the payment's handler for its status,
+			 * and when it reports `captured`, or the status cannot be read, the capture is recorded and the refusal is logged
+			 * at warning level with its code. `$context` carries no `settled` key, because that status is asked only after
+			 * the callback has answered. Refuse such payments at `intent`, or at `close` once the balance changed.
 			 *
 			 * @since 2.0.7
 			 *
@@ -100,6 +107,18 @@ final class Payment_Veto {
 			return null;
 		}
 		if ( ! is_wp_error( $veto ) ) {
+			return null;
+		}
+		$held = 'capture' === $kind && null !== $settled ? $settled() : null;
+		if ( null !== $held ) {
+			Logger::warning(
+				'WCPOS payment veto: a refusal of a capture whose money the provider already holds was ignored.',
+				array(
+					'reason'   => $held,
+					'code'     => $veto->get_error_code(),
+					'order_id' => $order->get_id(),
+				)
+			);
 			return null;
 		}
 		$code    = $veto->get_error_code();
@@ -125,5 +144,31 @@ final class Payment_Veto {
 			$data['detail'] = $error_data['detail'];
 		}
 		return new WP_Error( $code, $message, $data );
+	}
+
+	/**
+	 * Read-only provider check behind R12: an unreadable status counts as held so a charged card is never refused.
+	 *
+	 * @param WC_Order $order Order read under the lock.
+	 * @param string   $id    Payment id, lower case.
+	 */
+	public static function settled( WC_Order $order, string $id ): ?string {
+		$row = Ledger::instance()->find( $order, $id );
+		if ( null === $row ) {
+			return null;
+		}
+		$handler = Capture_Mode_Registry::instance()->resolve( $row['capture_mode'], $row['provider'] ?? null );
+		if ( null === $handler ) {
+			return null;
+		}
+		try {
+			$status = $handler->status( $row );
+			if ( is_wp_error( $status ) ) {
+				return 'status_failed';
+			}
+			return is_array( $status ) && 'captured' === ( $status['status'] ?? null ) ? 'captured' : null;
+		} catch ( \Throwable $error ) {
+			return 'status_failed';
+		}
 	}
 }
