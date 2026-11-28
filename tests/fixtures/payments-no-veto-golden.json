@@ -1,0 +1,295 @@
+{
+    "capture": {
+        "status": 200,
+        "data": {
+            "payment": {
+                "id": "10000000-0000-4000-8000-000000000005",
+                "source": "app",
+                "order_id": "<int>",
+                "method_id": "pos_cash",
+                "provider": null,
+                "kind": "cash",
+                "capture_mode": "golden_route",
+                "transport": null,
+                "recorded_offline": false,
+                "amount": "92.95",
+                "currency": "USD",
+                "tendered": null,
+                "change": null,
+                "tip": null,
+                "status": "captured",
+                "failure_reason": null,
+                "refunded_amount": "0.00",
+                "refunds": [],
+                "expires_at": null,
+                "seen_events": [],
+                "void_requested_at": null,
+                "events": [],
+                "provider_refs": {
+                    "reader": "reader-1"
+                },
+                "receipt": [],
+                "cashier_id": "<int>",
+                "store_id": null,
+                "register_id": null,
+                "session_id": null,
+                "created_at_gmt": "<date>",
+                "captured_at_gmt": "<date>",
+                "authorized_at_gmt": null,
+                "updated_at_gmt": "<date>"
+            },
+            "order": {
+                "status": "completed",
+                "total": "92.95",
+                "paid": "92.95",
+                "authorized": "0.00",
+                "balance": "0.00",
+                "refund_due": "0.00",
+                "refund_pending": "0.00",
+                "payment_method": "pos_cash",
+                "payment_method_title": "Cash"
+            },
+            "revision": "<revision>"
+        }
+    },
+    "close": {
+        "status": 200,
+        "data": {
+            "order": {
+                "status": "completed",
+                "total": "92.95",
+                "paid": "92.95",
+                "authorized": "0.00",
+                "balance": "0.00",
+                "refund_due": "0.00",
+                "refund_pending": "0.00",
+                "payment_method": "pos_cash",
+                "payment_method_title": "Cash"
+            },
+            "completion": {
+                "n": 1,
+                "id": "<uuid>"
+            },
+            "revision": "<revision>"
+        }
+    },
+    "intent": {
+        "status": 200,
+        "data": {
+            "payment": {
+                "id": "10000000-0000-4000-8000-000000000004",
+                "source": "app",
+                "order_id": "<int>",
+                "method_id": "pos_cash",
+                "provider": null,
+                "kind": "cash",
+                "capture_mode": "golden_route",
+                "transport": null,
+                "recorded_offline": false,
+                "amount": "92.95",
+                "currency": "USD",
+                "tendered": null,
+                "change": null,
+                "tip": null,
+                "status": "pending",
+                "failure_reason": null,
+                "refunded_amount": "0.00",
+                "refunds": [],
+                "expires_at": null,
+                "seen_events": [],
+                "void_requested_at": null,
+                "events": [],
+                "provider_refs": {
+                    "reader": "reader-1"
+                },
+                "receipt": [],
+                "cashier_id": "<int>",
+                "store_id": null,
+                "register_id": null,
+                "session_id": null,
+                "created_at_gmt": "<date>",
+                "captured_at_gmt": null,
+                "authorized_at_gmt": null,
+                "updated_at_gmt": "<date>"
+            },
+            "order": {
+                "status": "pending",
+                "total": "92.95",
+                "paid": "0.00",
+                "authorized": "0.00",
+                "balance": "92.95",
+                "refund_due": "0.00",
+                "refund_pending": "0.00",
+                "payment_method": "bacs",
+                "payment_method_title": "Direct bank transfer"
+            },
+            "handoff": {
+                "reader": "reader-1"
+            },
+            "revision": "<revision>"
+        }
+    },
+    "record_full": {
+        "status": 200,
+        "data": {
+            "payment": {
+                "id": "10000000-0000-4000-8000-000000000002",
+                "source": "app",
+                "order_id": "<int>",
+                "method_id": "pos_cash",
+                "provider": null,
+                "kind": "cash",
+                "capture_mode": "manual",
+                "transport": null,
+                "recorded_offline": false,
+                "amount": "92.95",
+                "currency": "USD",
+                "tendered": null,
+                "change": null,
+                "tip": null,
+                "status": "captured",
+                "failure_reason": null,
+                "refunded_amount": "0.00",
+                "refunds": [],
+                "expires_at": null,
+                "seen_events": [],
+                "void_requested_at": null,
+                "events": [],
+                "provider_refs": [],
+                "receipt": [],
+                "cashier_id": "<int>",
+                "store_id": null,
+                "register_id": null,
+                "session_id": null,
+                "created_at_gmt": "<date>",
+                "captured_at_gmt": "<date>",
+                "authorized_at_gmt": null,
+                "updated_at_gmt": "<date>"
+            },
+            "order": {
+                "status": "completed",
+                "total": "92.95",
+                "paid": "92.95",
+                "authorized": "0.00",
+                "balance": "0.00",
+                "refund_due": "0.00",
+                "refund_pending": "0.00",
+                "payment_method": "pos_cash",
+                "payment_method_title": "Cash"
+            },
+            "revision": "<revision>"
+        }
+    },
+    "record_partial": {
+        "status": 200,
+        "data": {
+            "payment": {
+                "id": "10000000-0000-4000-8000-000000000001",
+                "source": "app",
+                "order_id": "<int>",
+                "method_id": "pos_cash",
+                "provider": null,
+                "kind": "cash",
+                "capture_mode": "manual",
+                "transport": null,
+                "recorded_offline": false,
+                "amount": "50.00",
+                "currency": "USD",
+                "tendered": null,
+                "change": null,
+                "tip": null,
+                "status": "captured",
+                "failure_reason": null,
+                "refunded_amount": "0.00",
+                "refunds": [],
+                "expires_at": null,
+                "seen_events": [],
+                "void_requested_at": null,
+                "events": [],
+                "provider_refs": [],
+                "receipt": [],
+                "cashier_id": "<int>",
+                "store_id": null,
+                "register_id": null,
+                "session_id": null,
+                "created_at_gmt": "<date>",
+                "captured_at_gmt": "<date>",
+                "authorized_at_gmt": null,
+                "updated_at_gmt": "<date>"
+            },
+            "order": {
+                "status": "pos-partial",
+                "total": "92.95",
+                "paid": "50.00",
+                "authorized": "0.00",
+                "balance": "42.95",
+                "refund_due": "0.00",
+                "refund_pending": "0.00",
+                "payment_method": "pos_cash",
+                "payment_method_title": "Cash"
+            },
+            "revision": "<revision>"
+        }
+    },
+    "record_replay": {
+        "status": 200,
+        "data": {
+            "payment": {
+                "id": "10000000-0000-4000-8000-000000000003",
+                "source": "app",
+                "order_id": "<int>",
+                "method_id": "pos_cash",
+                "provider": null,
+                "kind": "cash",
+                "capture_mode": "manual",
+                "transport": null,
+                "recorded_offline": false,
+                "amount": "50.00",
+                "currency": "USD",
+                "tendered": null,
+                "change": null,
+                "tip": null,
+                "status": "captured",
+                "failure_reason": null,
+                "refunded_amount": "0.00",
+                "refunds": [],
+                "expires_at": null,
+                "seen_events": [],
+                "void_requested_at": null,
+                "events": [],
+                "provider_refs": [],
+                "receipt": [],
+                "cashier_id": "<int>",
+                "store_id": null,
+                "register_id": null,
+                "session_id": null,
+                "created_at_gmt": "<date>",
+                "captured_at_gmt": "<date>",
+                "authorized_at_gmt": null,
+                "updated_at_gmt": "<date>"
+            },
+            "order": {
+                "status": "pos-partial",
+                "total": "92.95",
+                "paid": "50.00",
+                "authorized": "0.00",
+                "balance": "42.95",
+                "refund_due": "0.00",
+                "refund_pending": "0.00",
+                "payment_method": "pos_cash",
+                "payment_method_title": "Cash"
+            },
+            "revision": "<revision>"
+        }
+    },
+    "submit": {
+        "status": 501,
+        "data": {
+            "code": "wcpos_capture_mode_unsupported",
+            "message": "Payment capture mode is unsupported.",
+            "data": {
+                "status": 501
+            }
+        }
+    }
+}

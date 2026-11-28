@@ -149,6 +149,7 @@ final class Controller_Registry {
 
 			// The register/session surface: v2-native, no v1 predecessor.
 			'payment_methods' => V2\Payment_Methods_Controller::class,
+			'coupon_types'    => V2\Coupon_Types_Controller::class,
 			'payments'        => V2\Payments_Controller::class,
 			'registers'       => V2\Registers_Controller::class,
 			'sessions'        => V2\Sessions_Controller::class,
